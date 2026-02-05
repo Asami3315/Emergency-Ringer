@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Emergency Ringer</string>
+
+    <!-- Permission Lab -->
+    <string name="permission_notification_access">Notification Access</string>
+    <string name="permission_notification_access_desc">Required to detect incoming calls from WhatsApp and the Phone app</string>
+    <string name="permission_dnd_access">Do Not Disturb Access</string>
+    <string name="permission_dnd_access_desc">Allows the app to bypass DND when an emergency contact calls</string>
+    <string name="permission_contacts">Contacts Access</string>
+    <string name="permission_contacts_desc">Required to pick emergency contacts from your address book</string>
+    <string name="grant_access">Grant Access</string>
+    <string name="access_granted">Access Granted</string>
+
+    <!-- Disclosure -->
+    <string name="disclosure_title">Why We Need Notification Access</string>
+    <string name="disclosure_text">Emergency Ringer monitors incoming call notifications from your Phone app and WhatsApp. When a call matches one of your emergency contacts, the app overrides Silent and Do Not Disturb modes to play a loud alarm. We do not store, transmit, or share any notification content. All processing happens on your device.</string>
+
+    <!-- Whitelist UI -->
+    <string name="emergency_contacts">Emergency Contacts</string>
+    <string name="add_contact">Add Emergency Contact</string>
+    <string name="no_contacts">No emergency contacts yet. Tap + to add.</string>
+    <string name="remove">Remove</string>
+</resources>
