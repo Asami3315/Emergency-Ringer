@@ -54,4 +54,30 @@ object EmergencyContactRepository {
         current.remove(Contact(name, number).persistenceValue)
         prefs.edit().putStringSet(KEY_CONTACTS, current).apply()
     }
+    
+    // Master toggle for monitoring
+    private const val KEY_MONITORING_ENABLED = "monitoring_enabled"
+    
+    fun setMonitoringEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_MONITORING_ENABLED, enabled).apply()
+    }
+    
+    fun isMonitoringEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_MONITORING_ENABLED, true) // Default enabled
+    }
+    
+    // Custom ringtone
+    private const val KEY_RINGTONE_URI = "ringtone_uri"
+    
+    fun setRingtoneUri(context: Context, uri: String?) {
+        getPrefs(context).edit().putString(KEY_RINGTONE_URI, uri).apply()
+    }
+    
+    fun getRingtoneUri(context: Context): String? {
+        return getPrefs(context).getString(KEY_RINGTONE_URI, null)
+    }
+    
+    // Ringer playing state (to show End Call button)
+    @Volatile
+    var isRingerPlaying: Boolean = false
 }

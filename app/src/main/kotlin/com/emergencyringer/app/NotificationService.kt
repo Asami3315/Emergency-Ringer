@@ -124,6 +124,13 @@ class NotificationService : NotificationListenerService() {
         
         if (!matches) return
 
+        // Check if monitoring is enabled
+        if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
+            Log.i(TAG, "⏸️ Monitoring disabled by user - skipping emergency ringer")
+            AppLog.log("⏸️ Monitoring disabled - ringer not triggered", applicationContext)
+            return
+        }
+
         Log.i(TAG, "🚨 EMERGENCY CALL - triggering ringer for: $title")
         AppLog.log("🚨 EMERGENCY - triggering ringer for: $title", applicationContext)
         RingerManager.triggerEmergencyRinger(applicationContext)

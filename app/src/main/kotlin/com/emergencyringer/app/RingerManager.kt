@@ -180,11 +180,24 @@ object RingerManager {
                     setOnCompletionListener { release() }
                     setOnErrorListener { _, _, _ -> release(); true }
                 }
-                player.setDataSource(context, getAlarmUri(context))
+                
+                // Use custom ringtone if selected, otherwise default alarm
+                val ringtoneUriString = EmergencyContactRepository.getRingtoneUri(context)
+                val uri = if (ringtoneUriString != null) {
+                    android.net.Uri.parse(ringtoneUriString)
+                } else {
+                    getAlarmUri(context)
+                }
+                
+                player.setDataSource(context, uri)
                 player.prepare()
                 player.start()
                 mediaPlayer = player
-                player.setOnCompletionListener { wakeLock?.let { if (it.isHeld) it.release() } }
+                EmergencyContactRepository.isRingerPlaying = true  // Set playing state
+                player.setOnCompletionListener { 
+                    wakeLock?.let { if (it.isHeld) it.release() }
+                    EmergencyContactRepository.isRingerPlaying = false
+                }
                 AppLog.log("🎵 Alarm PLAYING! (auto-stop in 30s)", context)
                 
                 // Schedule auto-stop after 30 seconds
@@ -247,5 +260,6 @@ object RingerManager {
             } catch (_: Exception) {}
             mediaPlayer = null
         }
+        EmergencyContactRepository.isRingerPlaying = false  // Clear playing state
     }
 }
