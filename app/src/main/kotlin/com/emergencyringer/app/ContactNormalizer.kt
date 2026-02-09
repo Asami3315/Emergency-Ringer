@@ -16,13 +16,15 @@ object ContactNormalizer {
         "incoming call",
         "voice call",
         "video call",
+        "incoming",
+        "call",
+        "ringing",
+        "phone call",
         "anruf",
         "eingehender anruf",
         "appel entrant",
         "llamada entrante",
-        "chamada recebida",
-        "incoming",
-        "call"
+        "chamada recebida"
     )
 
     /**
@@ -35,12 +37,12 @@ object ContactNormalizer {
     }
 
     /**
-     * Check if whitelisted name matches the notification title.
+     * Check if whitelisted name matches the notification text (title, body, etc).
      * Uses contains() in both directions for flexible matching.
      */
-    fun matches(whitelistedName: String, notificationTitle: String): Boolean {
+    fun matches(whitelistedName: String, notificationText: String): Boolean {
         val w = normalize(whitelistedName)
-        val n = normalize(notificationTitle)
+        val n = normalize(notificationText)
         if (w.isEmpty() || n.isEmpty()) return false
         return n.contains(w) || w.contains(n)
     }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.BugReport
 
 class MainActivity : ComponentActivity() {
 
@@ -94,7 +98,11 @@ class MainActivity : ComponentActivity() {
                     hasNotificationAccess = { isNotificationServiceEnabled() },
                     hasContactsPermission = { hasContactsPermission() },
                     hasDndAccess = { hasDndAccess() },
-                    isBatteryOptimizationDisabled = { isBatteryOptimizationDisabled() }
+                    isBatteryOptimizationDisabled = { isBatteryOptimizationDisabled() },
+                    onTestRinger = {
+                        AppLog.log("Test Ringer pressed", this)
+                        RingerManager.triggerEmergencyRinger(this)
+                    }
                 )
             }
         }
@@ -190,12 +198,15 @@ fun MainScreen(
     hasNotificationAccess: () -> Boolean,
     hasContactsPermission: () -> Boolean,
     hasDndAccess: () -> Boolean,
-    isBatteryOptimizationDisabled: () -> Boolean
+    isBatteryOptimizationDisabled: () -> Boolean,
+    onTestRinger: () -> Unit
 ) {
     val context = LocalContext.current
     var contacts by remember { mutableStateOf(EmergencyContactRepository.getWhitelistSync(context)) }
     var showDisclosure by remember { mutableStateOf(false) }
+    var showLogs by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
+    val logMessages by AppLog.messages.collectAsState(initial = emptyList())
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         refreshTrigger++
@@ -210,6 +221,10 @@ fun MainScreen(
             TopAppBar(
                 title = { Text("Emergency Ringer") },
                 actions = {
+                    Button(onClick = { showLogs = true }) {
+                        Icon(Icons.Default.BugReport, contentDescription = null, Modifier.padding(end = 4.dp))
+                        Text("Logs")
+                    }
                     Button(onClick = { showDisclosure = true }) {
                         Icon(Icons.Default.Info, contentDescription = null, Modifier.padding(end = 4.dp))
                         Text("Why?")
@@ -258,6 +273,11 @@ fun MainScreen(
                 onGrant = onRequestBatteryOptimization
             )
 
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onTestRinger, modifier = Modifier.fillMaxWidth()) {
+                Text("Test Ringer (plays alarm now)")
+            }
+
             Spacer(Modifier.height(24.dp))
             Text("Emergency Contacts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
@@ -277,6 +297,42 @@ fun MainScreen(
                                 contacts = EmergencyContactRepository.getWhitelistSync(context)
                             }
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showLogs) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showLogs = false }) {
+            Card(Modifier.fillMaxWidth().fillMaxSize(0.8f)) {
+                Column(Modifier.fillMaxSize().padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Debug Logs", style = MaterialTheme.typography.titleLarge)
+                        Row {
+                            Button(onClick = { AppLog.refreshFromFile() }) { Text("Refresh") }
+                            Spacer(Modifier.padding(4.dp))
+                            Button(onClick = { AppLog.clear() }) { Text("Clear") }
+                            Spacer(Modifier.padding(4.dp))
+                            Button(onClick = { showLogs = false }) { Text("Close") }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Receive a call, tap Refresh. Logs persist across app restart.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    LaunchedEffect(Unit) { AppLog.refreshFromFile() }
+                    val scroll = rememberScrollState()
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(scroll),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (logMessages.isEmpty()) {
+                            Text("No logs yet. Tap Test Ringer or receive a call, then Refresh.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            logMessages.forEach { msg ->
+                                Text(msg, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
                     }
                 }
             }
