@@ -21,8 +21,17 @@
     <!-- Optional: Request to ignore battery optimization for reliability -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         tools:ignore="ProtectedPermissions" />
+    
+    <!-- Permission for vibration -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Permission for flashlight strobe -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
 
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
 
     <application
         android:name=".EmergencyRingerApp"
@@ -35,14 +44,19 @@
         tools:targetApi="34">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.EmergencyRinger">
+            android:theme="@style/Theme.EmergencyRinger.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.EmergencyRinger" />
 
         <service
             android:name=".NotificationService"
@@ -54,6 +68,18 @@
             <meta-data
                 android:name="android.service.notification.default_filter_types"
                 android:value="conversations|alerting" />
+        </service>
+        
+        <!-- Quick Settings Tile Service -->
+        <service
+            android:name=".ProtectionTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_clock"
+            android:label="Emergency Ringer"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

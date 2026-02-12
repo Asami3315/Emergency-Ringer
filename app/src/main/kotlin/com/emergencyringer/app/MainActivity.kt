@@ -1,6 +1,9 @@
 package com.emergencyringer.app
 
 import android.content.Intent
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.launch
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -13,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -40,6 +44,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,7 +117,10 @@ class MainActivity : ComponentActivity() {
                     onTestRinger = {
                         RingerManager.triggerEmergencyRinger(this)
                     },
-                    onSelectRingtone = {
+                    onStopRinger = {
+                        RingerManager.stopCurrentRinger()
+                    },
+                    onSelectRingtoneInSettings = {
                         val intent = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).apply {
                             putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_RINGTONE)
                             putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Emergency Ringtone")
@@ -122,9 +130,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         ringtonePickerLauncher.launch(intent)
-                    },
-                    onStopRinger = {
-                        RingerManager.stopCurrentRinger()
                     }
                 )
             }
@@ -247,13 +252,14 @@ fun MainScreen(
     hasDndAccess: () -> Boolean,
     isBatteryOptimizationDisabled: () -> Boolean,
     onTestRinger: () -> Unit,
-    onSelectRingtone: () -> Unit,
-    onStopRinger: () -> Unit
+    onStopRinger: () -> Unit,
+    onSelectRingtoneInSettings: () -> Unit
 ) {
     val context = LocalContext.current
     var contacts by remember { mutableStateOf(EmergencyContactRepository.getWhitelistSync(context)) }
     var refreshTrigger by remember { mutableStateOf(0) }
     var isRingerPlaying by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         refreshTrigger++
@@ -270,6 +276,22 @@ fun MainScreen(
             kotlinx.coroutines.delay(500)
             isRingerPlaying = EmergencyContactRepository.isRingerPlaying
         }
+    }
+    // Show settings screen or main screen
+    if (showSettings) {
+        SettingsScreen(
+            onBack = { showSettings = false },
+            onSelectRingtone = onSelectRingtoneInSettings,
+            onTestRinger = {
+                RingerManager.triggerEmergencyRinger(context)
+            },
+            onStopRinger = {
+                RingerManager.stopCurrentRinger()
+            },
+            vibrantPurple = VibrantPurple,
+            deepPurple = DeepPurple
+        )
+        return
     }
 
     // Gradient background - White to Purple
@@ -295,15 +317,67 @@ fun MainScreen(
                 .padding(20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header
-            Text(
-                "Emergency Ringer",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp
-                ),
-                color = Color(0xFF1A1A1A)
-            )
+            // Header with Settings button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Animated heading with typing effect, fade-in, and slide
+                val fullTitle = "Emergency Ringer"
+                var displayedText by remember { mutableStateOf("") }
+                val slideOffset = remember { Animatable(30f) }
+                val titleAlpha = remember { Animatable(0f) }
+                
+                LaunchedEffect(Unit) {
+                    // Start fade-in, slide, and typing all concurrently
+                    kotlinx.coroutines.coroutineScope {
+                        launch {
+                            titleAlpha.animateTo(1f, animationSpec = tween(600, easing = EaseOutCubic))
+                        }
+                        launch {
+                            slideOffset.animateTo(0f, animationSpec = tween(600, easing = EaseOutCubic))
+                        }
+                        launch {
+                            kotlinx.coroutines.delay(100)
+                            for (i in 1..fullTitle.length) {
+                                displayedText = fullTitle.substring(0, i)
+                                kotlinx.coroutines.delay(45)
+                            }
+                        }
+                    }
+                }
+                
+                Text(
+                    displayedText,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.5).sp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF7C3AED),  // Deep violet (top-left of gear)
+                                Color(0xFFD946EF)   // Bright magenta (bottom-right of gear)
+                            )
+                        )
+                    ),
+                    modifier = Modifier
+                        .graphicsLayer {
+                            alpha = titleAlpha.value
+                            translationY = slideOffset.value
+                        }
+                )
+                IconButton(
+                    onClick = { showSettings = true },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_settings_gear),
+                        contentDescription = "Settings",
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -315,7 +389,7 @@ fun MainScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Permissions Section
+            // Permissions Section - Temporarily always visible for testing
             PermissionsSection(
                 hasNotificationAccess = hasNotificationAccess(),
                 hasDndAccess = hasDndAccess(),
@@ -329,9 +403,8 @@ fun MainScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Emergency Ringer Controls
+            // Emergency Ringer Controls - Only show End Call when ringing
             if (isRingerPlaying) {
-                // End Call Button when ringing
                 Button(
                     onClick = onStopRinger,
                     modifier = Modifier
@@ -347,43 +420,6 @@ fun MainScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("End Call", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 }
-            } else {
-                // Test button and Ringtone selection
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = onSelectRingtone,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFF5F5F5),
-                            contentColor = VibrantPurple
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.MusicNote, null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Ringtone", fontWeight = FontWeight.SemiBold)
-                    }
-                    Button(
-                        onClick = onTestRinger,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = VibrantPurple,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Test", fontWeight = FontWeight.SemiBold)
-                    }
-                }
             }
 
             Spacer(Modifier.height(28.dp))
@@ -397,9 +433,14 @@ fun MainScreen(
                 Text(
                     "Emergency Contacts",
                     style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color(0xFF1A1A1A)
+                        fontWeight = FontWeight.ExtraBold,
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF7C3AED),
+                                Color(0xFFD946EF)
+                            )
+                        )
+                    )
                 )
                 IconButton(
                     onClick = onAddContact,
@@ -430,6 +471,21 @@ fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {
     val context = LocalContext.current
     var monitoringEnabled by remember { mutableStateOf(EmergencyContactRepository.isMonitoringEnabled(context)) }
     
+    // Real-time sync with SharedPreferences (updates instantly when Quick Settings Tile changes)
+    DisposableEffect(Unit) {
+        val prefs = context.getSharedPreferences("emergency_contacts", Context.MODE_PRIVATE)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "monitoring_enabled") {
+                monitoringEnabled = EmergencyContactRepository.isMonitoringEnabled(context)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -443,21 +499,21 @@ fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {
 
     val statusTitle = when {
         !monitoringEnabled -> "Monitoring Paused"
-        isActive && serviceConnected -> "Protection Active"
+        isActive && serviceConnected -> "Protection is ON"
         !isActive -> "Setup Required"
-        else -> "Service Disconnected"
+        else -> "Protection is OFF"
     }
     
     val statusMessage = when {
-        !monitoringEnabled -> "Toggle switch to resume monitoring"
-        isActive && serviceConnected -> "Emergency Ringer is monitoring all incoming calls"
+        !monitoringEnabled -> "Tap the switch above to start monitoring calls."
+        isActive && serviceConnected -> "Your phone will ring loudly for emergency contacts."
         !isActive -> "Enable permissions to activate protection"
-        else -> "Service disconnected. Re-enable notification access"
+        else -> "Tap the switch to start monitoring calls."
     }
     
     val statusColor = when {
         monitoringEnabled && isActive && serviceConnected -> VibrantPurple
-        else -> Color(0xFF666666)
+        else -> Color(0xFFE53935) // Red for inactive/paused states
     }
 
     Box(
@@ -502,7 +558,7 @@ fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {
                             .size(48.dp)
                             .scale(if (monitoringEnabled && isActive && serviceConnected) pulseScale else 1f)
                             .background(
-                                if (monitoringEnabled && isActive && serviceConnected) VibrantPurple else Color(0xFFCCCCCC),
+                                if (monitoringEnabled && isActive && serviceConnected) VibrantPurple else Color(0xFFE53935),
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -553,8 +609,9 @@ fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {
                 )
             }
             
-            // Action button when inactive (and system perms not granted)
+            // Action button - only show when monitoring is ON but permissions are missing
             if (monitoringEnabled && (!isActive || !serviceConnected)) {
+                Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = {
                         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -566,9 +623,38 @@ fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.Settings, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
                     Text("Enable Service", fontWeight = FontWeight.SemiBold)
+                }
+            }
+            
+            // Success banner when fully active
+            if (monitoringEnabled && isActive && serviceConnected) {
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = VibrantPurple.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, VibrantPurple.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = VibrantPurple,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            "All systems operational • Ready to protect",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = VibrantPurple
+                        )
+                    }
                 }
             }
         }
@@ -618,17 +704,23 @@ fun PermissionsSection(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
-                        Icons.Default.Settings,
+                        painter = painterResource(R.drawable.ic_settings_gear),
                         contentDescription = null,
-                        tint = VibrantPurple,
+                        tint = Color.Unspecified,
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        "Permissions",
+                        "Setup Required",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.ExtraBold,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF7C3AED),
+                                    Color(0xFFD946EF)
+                                )
+                            )
                         ),
-                        color = Color(0xFF1A1A1A)
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
                 Icon(
@@ -652,6 +744,13 @@ fun PermissionsSection(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Subtitle text
+                Text(
+                    "Enable these 4 settings to allow the ringer to bypass silence.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
                 CompactPermissionChip("Notifications", hasNotificationAccess, onRequestNotification)
                 CompactPermissionChip("Do Not Disturb", hasDndAccess, onRequestDnd)
                 CompactPermissionChip("Contacts", hasContactsPermission, onRequestContacts)
@@ -702,8 +801,8 @@ fun BentoContactGrid(
     val gridHeight = ((contacts.size / 2 + 1) * 140).dp
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.height(gridHeight)
     ) {
         items(contacts) { contact ->
@@ -786,9 +885,9 @@ fun OrganicContactCard(name: String, number: String, onRemove: () -> Unit) {
                 .size(32.dp)
         ) {
             Icon(
-                Icons.Default.Close,
+                painter = painterResource(R.drawable.cross),
                 contentDescription = "Remove",
-                tint = Color(0xFF666666),
+                tint = Color.Unspecified,
                 modifier = Modifier.size(16.dp)
             )
         }
