@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.emergencyringer.app.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +107,7 @@ fun SettingsScreen(
                     Icon(Icons.Default.ArrowBack, "Back", tint = vibrantPurple)
                 }
                 Text(
-                    "Settings",
+                    "SYSTEM CONTROL",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.ExtraBold,
                         brush = Brush.linearGradient(
@@ -127,6 +128,53 @@ fun SettingsScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
+                // ═══════════════════════════════════════
+                // SYSTEM STATUS & HEADER
+                // ═══════════════════════════════════════
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White,
+                    shadowElevation = 2.dp,
+                    border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                "NEXUS-TEC SYSTEM STATUS",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF1A1A1A)
+                            )
+                        }
+                        
+                        Text(
+                            "Active",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF4CAF50)
+                        )
+                        
+                        Text(
+                            "Emergency Ringer is a passive monitoring utility designed to override system-level silence for critical contacts. This software operates locally on your device to ensure zero-latency connection during emergencies.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666),
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
                 // ═══════════════════════════════════════
                 // ALARM BEHAVIOR
                 // ═══════════════════════════════════════
@@ -599,6 +647,91 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(20.dp))
+                // ═══════════════════════════════════════
+                // SUPPORT & LEGAL
+                // ═══════════════════════════════════════
+                SettingsSectionCard(title = "Support & Legal", vibrantPurple = vibrantPurple) {
+                    SettingsActionRow(
+                        title = "Initiate Support Ticket",
+                        subtitle = "Contact Engineering Team directly.",
+                        icon = Icons.Default.SupportAgent,
+                        vibrantPurple = vibrantPurple,
+                        onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                                data = android.net.Uri.parse("mailto:")
+                                putExtra(android.content.Intent.EXTRA_EMAIL, arrayOf("nexustec.official@gmail.com"))
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "[TICKET#3859] Emergency Ringer Support Request")
+                                putExtra(android.content.Intent.EXTRA_TEXT, """
+                                    Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}
+                                    Android Version: ${android.os.Build.VERSION.RELEASE}
+                                    App Version: ${BuildConfig.VERSION_NAME}
+                                    
+                                    --- WRITE YOUR ISSUE BELOW ---
+                                    
+                                """.trimIndent())
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // Handle case where no email app is available
+                            }
+                        }
+                    )
+                    
+                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+                    
+                    SettingsActionRow(
+                        title = "Privacy & Data Protocol",
+                        subtitle = "Review data handling and local-only storage policy.",
+                        icon = Icons.Default.Security,
+                        vibrantPurple = vibrantPurple,
+                        onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://doc-hosting.flycricket.io/emergency-ringer-privacy-policy/2f99335f-4632-4720-94cb-59aa38699479/privacy"))
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }
+                    )
+                    
+                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+
+                    SettingsActionRow(
+                        title = "Deploy to External User",
+                        subtitle = "Send download link to another device.",
+                        icon = Icons.Default.Share,
+                        vibrantPurple = vibrantPurple,
+                        onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, "Check out Emergency Ringer - Ensure you never miss critical calls from loved ones! Download here: https://play.google.com/store/apps/details?id=com.emergencyringer.app")
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share App"))
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Footer
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        "ENGINEERED BY NEXUS-TEC",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = Color(0xFF999999)
+                    )
+                    Text(
+                        "Islamabad, PK Operations",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFAAAAAA)
+                    )
+                    Text(
+                        "v${BuildConfig.VERSION_NAME} (Stable Build)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFAAAAAA)
+                    )
+                }
             }
         }
     }
@@ -667,5 +800,61 @@ fun SettingToggleRow(
                 uncheckedTrackColor = Color(0xFFCCCCCC)
             )
         )
+    }
+}
+@Composable
+fun SettingsActionRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    vibrantPurple: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape,
+                color = vibrantPurple.copy(alpha = 0.1f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = vibrantPurple,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666)
+                )
+            }
+            
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = Color(0xFFCCCCCC)
+            )
+        }
     }
 }
