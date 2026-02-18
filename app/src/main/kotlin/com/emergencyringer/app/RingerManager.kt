@@ -127,55 +127,31 @@ object RingerManager {
             }
 
             // ══════════════════════════════════════
-            // STEP 2: Unmute and set ringer mode
+            // STEP 2: Silence the phone's own ringer
             // ══════════════════════════════════════
-            AppLog.log("🔔 Setting ringer to NORMAL...", context)
-            am.adjustVolume(AudioManager.ADJUST_UNMUTE, 0)
-            am.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0)
-            am.ringerMode = AudioManager.RINGER_MODE_NORMAL
-
-            // Verify ringer mode changed
-            val newRingerMode = am.ringerMode
-            val newRingerName = when (newRingerMode) {
-                AudioManager.RINGER_MODE_SILENT -> "SILENT"
-                AudioManager.RINGER_MODE_VIBRATE -> "VIBRATE"
-                AudioManager.RINGER_MODE_NORMAL -> "NORMAL"
-                else -> "UNKNOWN"
-            }
-            if (newRingerMode == AudioManager.RINGER_MODE_NORMAL) {
-                AppLog.log("✅ Ringer mode: $newRingerName", context)
-            } else {
-                AppLog.log("❌ Ringer still: $newRingerName", context)
-            }
+            // Keep ringer SILENT so the phone's default ringtone does NOT play.
+            // Our custom alarm will use the ALARM stream instead.
+            AppLog.log("🔇 Silencing phone ringer (our alarm uses ALARM stream)...", context)
+            am.ringerMode = AudioManager.RINGER_MODE_SILENT
+            AppLog.log("✅ Ringer mode set to SILENT", context)
 
             // ══════════════════════════════════════
             // STEP 3: Crank volume to maximum
             // ══════════════════════════════════════
             AppLog.log("📢 Setting volume to MAX...", context)
             
-            val flags = AudioManager.FLAG_ALLOW_RINGER_MODES or
-                AudioManager.FLAG_PLAY_SOUND or
-                AudioManager.FLAG_VIBRATE
+            // Mute RING stream (prevents phone's default ringtone)
+            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
+            AppLog.log("🔇 Ring Vol: MUTED", context)
 
-            // Set RING volume
-            val maxRinger = am.getStreamMaxVolume(AudioManager.STREAM_RING)
-            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)  // Mute to prevent dual ringtone!
-            val newRingVol = am.getStreamVolume(AudioManager.STREAM_RING)
-            AppLog.log("🔊 Ring Vol: $newRingVol/$maxRinger ${if (newRingVol == maxRinger) "✅" else "❌"}", context)
+            // Mute NOTIFICATION stream (linked to RING on many phones)
+            am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
+            AppLog.log("🔇 Notification Vol: MUTED", context)
 
-            // Set VOICE CALL volume
-            val maxVoice = am.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-            am.setStreamVolume(AudioManager.STREAM_VOICE_CALL, maxVoice, flags)
-            val newVoiceVol = am.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
-            
-            // Also set NOTIFICATION volume
-            val maxNotif = am.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION)
-            am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, maxNotif, flags)
-
-            // Also set ALARM volume (for our alarm sound)
+            // Only set ALARM volume to maximum (our custom alarm uses this stream)
             val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
-            AppLog.log("🔔 Alarm Vol: ${am.getStreamVolume(AudioManager.STREAM_ALARM)}/$maxAlarm", context)
+            AppLog.log("🔔 Alarm Vol: ${am.getStreamVolume(AudioManager.STREAM_ALARM)}/$maxAlarm ✅", context)
 
             // ══════════════════════════════════════
             // STEP 4: Play alarm sound based on type
@@ -323,7 +299,7 @@ object RingerManager {
                     NotificationManager.INTERRUPTION_FILTER_ALL -> "OFF"
                     else -> "UNKNOWN"
                 }
-                AppLog.log("📊 AFTER: DND=$finalDndName, Ringer=$newRingerName, Vol=$newRingVol/$maxRinger", context)
+                AppLog.log("📊 AFTER: DND=$finalDndName, Ringer=SILENT, Ring=MUTED, Alarm=MAX", context)
             }
             AppLog.log("═══════════════════════════════════════", context)
             AppLog.log("✅ OVERRIDE COMPLETE", context)

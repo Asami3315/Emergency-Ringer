@@ -83,7 +83,20 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) {
             val uri = result.data?.getParcelableExtra<android.net.Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
             if (uri != null) {
+                // Try to persist read permission so the URI survives app restarts
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri, 
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: SecurityException) {
+                    // Some URIs (like built-in ringtones) don't support persistable permissions
+                    // That's OK - they're always accessible
+                }
+                
                 EmergencyContactRepository.setRingtoneUri(this, uri.toString())
+                // Auto-switch to "Custom Sound" when user picks a ringtone
+                EmergencyContactRepository.setRingtoneSource(this, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
                 Toast.makeText(this, "Ringtone selected!", Toast.LENGTH_SHORT).show()
             }
         }
@@ -92,6 +105,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         EmergencyContactRepository.init(this)
+        
+        // Request READ_PHONE_STATE permission for call end detection
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.READ_PHONE_STATE), 1001)
+            }
+        }
 
         setContent {
             EmergencyRingerTheme {
