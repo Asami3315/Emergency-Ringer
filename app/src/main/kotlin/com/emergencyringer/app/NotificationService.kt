@@ -38,6 +38,12 @@ class NotificationService : NotificationListenerService() {
             "com.xiaomi.incallui",
             "android"
         )
+        
+        // Track last triggered call to prevent re-triggering
+        @Volatile
+        private var lastTriggeredCaller: String? = null
+        @Volatile
+        private var lastTriggerTime: Long = 0
     }
 
     override fun onListenerConnected() {
@@ -55,6 +61,38 @@ class NotificationService : NotificationListenerService() {
         
         // Try to rebind
         requestRebind(android.content.ComponentName(this, NotificationService::class.java))
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+        if (sbn == null) return
+        
+        val pkg = sbn.packageName ?: return
+        
+        // Only process monitored packages (phone/WhatsApp call notifications)
+        if (pkg !in MONITORED_PACKAGES) return
+        
+        val notification = sbn.notification ?: return
+        
+        // Check if this was a call notification
+        val isCategoryCall = notification.category == Notification.CATEGORY_CALL
+        val extras = notification.extras
+        val templateClass = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            extras?.getString(Notification.EXTRA_TEMPLATE)
+        } else null
+        val isCallStyle = templateClass?.contains("Call", ignoreCase = true) == true
+        
+        if (isCategoryCall || isCallStyle) {
+            Log.i(TAG, "📵 Call notification removed - stopping ringer")
+            AppLog.log("📵 Call ended - stopping ringer", applicationContext)
+            
+            // Stop the emergency ringer automatically
+            RingerManager.stopCurrentRinger()
+            
+            // Clear the tracking so a new call can trigger again
+            lastTriggeredCaller = null
+            lastTriggerTime = 0
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -130,9 +168,23 @@ class NotificationService : NotificationListenerService() {
             AppLog.log("⏸️ Monitoring disabled - ringer not triggered", applicationContext)
             return
         }
+        
+        // Prevent re-triggering for the same caller within 30 seconds
+        // (avoids restart when "call ended" notification appears)
+        val currentTime = System.currentTimeMillis()
+        if (lastTriggeredCaller == callerText && (currentTime - lastTriggerTime) < 30_000) {
+            Log.i(TAG, "⏭️ Skipping - same caller triggered recently (prevents restart)")
+            AppLog.log("⏭️ Skip - already triggered for this call", applicationContext)
+            return
+        }
 
         Log.i(TAG, "🚨 EMERGENCY CALL - triggering ringer for: $title")
         AppLog.log("🚨 EMERGENCY - triggering ringer for: $title", applicationContext)
+        
+        // Update tracking before triggering
+        lastTriggeredCaller = callerText
+        lastTriggerTime = currentTime
+        
         RingerManager.triggerEmergencyRinger(applicationContext)
     }
 }

@@ -627,6 +627,9 @@ fun SettingsScreen(
                                     alarmSoundType = type
                                     EmergencyContactRepository.setAlarmSoundType(context, type)
                                     
+                                    // Stop any currently playing sound first
+                                    RingerManager.stopCurrentRinger()
+                                    
                                     // Preview the sound for 5 seconds
                                     RingerManager.triggerEmergencyRinger(
                                         context,

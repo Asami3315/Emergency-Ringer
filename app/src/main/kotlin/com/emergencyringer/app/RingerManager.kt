@@ -159,7 +159,7 @@ object RingerManager {
 
             // Set RING volume
             val maxRinger = am.getStreamMaxVolume(AudioManager.STREAM_RING)
-            am.setStreamVolume(AudioManager.STREAM_RING, maxRinger, flags)
+            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)  // Mute to prevent dual ringtone!
             val newRingVol = am.getStreamVolume(AudioManager.STREAM_RING)
             AppLog.log("🔊 Ring Vol: $newRingVol/$maxRinger ${if (newRingVol == maxRinger) "✅" else "❌"}", context)
 
