@@ -92,66 +92,53 @@ object RingerManager {
             }
 
             // ══════════════════════════════════════
-            // STEP 1: Bypass DND (CRITICAL FIRST STEP)
+            // STEP 1: Bypass DND
             // ══════════════════════════════════════
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (nm?.isNotificationPolicyAccessGranted == true) {
-                    AppLog.log("🚨 Disabling DND...", context)
-                    nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
-                    
-                    // Small delay to let the system process
-                    Thread.sleep(50)
-                    
-                    // Verify it worked
-                    val newFilter = nm.currentInterruptionFilter
-                    if (newFilter == NotificationManager.INTERRUPTION_FILTER_ALL) {
-                        AppLog.log("✅ DND DISABLED!", context)
-                        Log.i(TAG, "✅ DND DISABLED!")
-                    } else {
-                        val newFilterName = when (newFilter) {
-                            NotificationManager.INTERRUPTION_FILTER_NONE -> "TOTAL SILENCE"
-                            NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "DND (Priority)"
-                            NotificationManager.INTERRUPTION_FILTER_ALARMS -> "DND (Alarms)"
-                            else -> "UNKNOWN($newFilter)"
-                        }
-                        AppLog.log("❌ DND STILL ON: $newFilterName", context)
-                        Log.e(TAG, "❌ DND STILL ACTIVE: $newFilter")
-                        
-                        // Try once more
+            // The MediaPlayer uses USAGE_ALARM which bypasses DND natively on most devices.
+            // We also call setInterruptionFilter as an extra guarantee.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm != null) {
+                val hasAccess = nm.isNotificationPolicyAccessGranted
+                AppLog.log("🔕 DND access=$hasAccess | filter=${nm.currentInterruptionFilter}", context)
+                
+                if (hasAccess) {
+                    try {
                         nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                        AppLog.log("✅ DND disabled via setInterruptionFilter", context)
+                    } catch (e: Exception) {
+                        AppLog.log("⚠️ setInterruptionFilter failed: ${e.message}", context)
                     }
                 } else {
-                    AppLog.log("❌ NO DND ACCESS! Go to Settings > Apps > Emergency Ringer > Notifications > Do Not Disturb access", context)
-                    Log.e(TAG, "❌ NO DND ACCESS!")
+                    AppLog.log("⚠️ No DND access - USAGE_ALARM will bypass DND natively", context)
                 }
             }
 
             // ══════════════════════════════════════
-            // STEP 2: Silence the phone's own ringer
+            // STEP 2: Unmute ALARM stream to max
             // ══════════════════════════════════════
-            // Keep ringer SILENT so the phone's default ringtone does NOT play.
-            // Our custom alarm will use the ALARM stream instead.
-            AppLog.log("🔇 Silencing phone ringer (our alarm uses ALARM stream)...", context)
-            am.ringerMode = AudioManager.RINGER_MODE_SILENT
-            AppLog.log("✅ Ringer mode set to SILENT", context)
+            // DO NOT touch ringerMode - it interferes with DND on many phones.
+            // Just set ALARM stream to max and mute RING to prevent dual ringtone.
+            try {
+                // Unmute alarm stream first (in case it was muted)
+                am.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0)
+                // Set alarm to max volume
+                val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
+                AppLog.log("🔔 Alarm Vol: ${am.getStreamVolume(AudioManager.STREAM_ALARM)}/$maxAlarm ✅", context)
+            } catch (e: Exception) {
+                AppLog.log("⚠️ Alarm volume error: ${e.message}", context)
+            }
 
             // ══════════════════════════════════════
-            // STEP 3: Crank volume to maximum
+            // STEP 3: Mute RING stream (prevents dual ringtone)
             // ══════════════════════════════════════
-            AppLog.log("📢 Setting volume to MAX...", context)
-            
-            // Mute RING stream (prevents phone's default ringtone)
-            am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
-            AppLog.log("🔇 Ring Vol: MUTED", context)
-
-            // Mute NOTIFICATION stream (linked to RING on many phones)
-            am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
-            AppLog.log("🔇 Notification Vol: MUTED", context)
-
-            // Only set ALARM volume to maximum (our custom alarm uses this stream)
-            val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
-            AppLog.log("🔔 Alarm Vol: ${am.getStreamVolume(AudioManager.STREAM_ALARM)}/$maxAlarm ✅", context)
+            // Mute RING to 0 so phone's default ringtone doesn't play alongside our alarm.
+            // We do NOT change ringerMode - that would re-trigger DND on many devices.
+            try {
+                am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
+                AppLog.log("🔇 Ring stream muted (prevents dual ringtone)", context)
+            } catch (e: Exception) {
+                AppLog.log("⚠️ Ring mute error: ${e.message}", context)
+            }
 
             // ══════════════════════════════════════
             // STEP 4: Play alarm sound based on type

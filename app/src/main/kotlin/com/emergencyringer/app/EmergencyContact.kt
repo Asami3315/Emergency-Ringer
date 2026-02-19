@@ -92,6 +92,17 @@ object EmergencyContactRepository {
         return getPrefs(context).getString(KEY_RINGTONE_SOURCE, RINGTONE_SOURCE_PHONE) ?: RINGTONE_SOURCE_PHONE
     }
     
+    // Ringtone display name (saved at selection time so it survives app restart)
+    private const val KEY_RINGTONE_NAME = "ringtone_name"
+    
+    fun setRingtoneName(context: Context, name: String?) {
+        getPrefs(context).edit().putString(KEY_RINGTONE_NAME, name).apply()
+    }
+    
+    fun getRingtoneName(context: Context): String? {
+        return getPrefs(context).getString(KEY_RINGTONE_NAME, null)
+    }
+    
     // Ringer playing state (to show End Call button)
     @Volatile
     var isRingerPlaying: Boolean = false

@@ -57,12 +57,17 @@ fun SettingsScreen(
     // Get ringtone name - reactive to changes
     var ringtoneRefresh by remember { mutableStateOf(0) }
     val ringtoneUri = remember(ringtoneRefresh) { EmergencyContactRepository.getRingtoneUri(context) }
-    val ringtoneName = remember(ringtoneUri) {
-        if (ringtoneUri != null) {
+    
+    // Use the saved name directly (set at selection time) - avoids URI resolution failures after restart
+    val ringtoneName = remember(ringtoneRefresh) {
+        val savedName = EmergencyContactRepository.getRingtoneName(context)
+        if (!savedName.isNullOrBlank()) {
+            savedName
+        } else if (ringtoneUri != null) {
+            // Fallback: try to resolve from URI (may fail after restart for some URIs)
             try {
                 val ringtone = android.media.RingtoneManager.getRingtone(context, android.net.Uri.parse(ringtoneUri))
                 val title = ringtone?.getTitle(context)
-                // Filter out raw numeric/URI titles that aren't human-readable
                 if (title != null && !title.all { it.isDigit() } && title.length > 1) title
                 else "Pick your favorite alarm sound"
             } catch (e: Exception) {
@@ -73,8 +78,13 @@ fun SettingsScreen(
         }
     }
     
+    // Ringtone source - at top level so it refreshes on resume
+    var ringtoneSource by remember { mutableStateOf(EmergencyContactRepository.getRingtoneSource(context)) }
+    
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         ringtoneRefresh++
+        // Re-read ringtone source from prefs (may have changed via picker)
+        ringtoneSource = EmergencyContactRepository.getRingtoneSource(context)
     }
 
     // Gradient background
@@ -263,8 +273,7 @@ fun SettingsScreen(
                 // ═══════════════════════════════════════
                 SettingsSectionCard(title = "Audio Customization", vibrantPurple = vibrantPurple) {
                     
-                    // Ringtone Source Toggle
-                    var ringtoneSource by remember { mutableStateOf(EmergencyContactRepository.getRingtoneSource(context)) }
+                    // Ringtone Source Toggle (reads from top-level state, refreshed on resume)
                     val isPhoneRingtone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
                     
                     Column(

@@ -89,6 +89,18 @@ class NotificationService : NotificationListenerService() {
      */
     private fun registerPhoneStateListener() {
         try {
+            // Check permission first
+            val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                android.Manifest.permission.READ_BASIC_PHONE_STATE
+            } else {
+                android.Manifest.permission.READ_PHONE_STATE
+            }
+            if (checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "⚠️ Phone state permission not granted - call end detection disabled")
+                AppLog.log("⚠️ Phone permission missing - grant it in app settings!", applicationContext)
+                return
+            }
+            
             val tm = getSystemService(TELEPHONY_SERVICE) as? TelephonyManager ?: return
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -152,10 +164,12 @@ class NotificationService : NotificationListenerService() {
             TelephonyManager.CALL_STATE_OFFHOOK -> "OFFHOOK"
             else -> "UNKNOWN($state)"
         }
-        Log.i(TAG, "📞 Call state: $stateName | ringerTriggered=$ringerWasTriggered")
+        // Use isRingerPlaying as the authoritative check (more reliable than ringerWasTriggered)
+        val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
+        Log.i(TAG, "📞 Call state: $stateName | ringerActive=$ringerActive")
         
-        // When call ends (IDLE) and we triggered the ringer, stop it
-        if (state == TelephonyManager.CALL_STATE_IDLE && ringerWasTriggered) {
+        // When call ends (IDLE) and ringer is active, stop it
+        if (state == TelephonyManager.CALL_STATE_IDLE && ringerActive) {
             Log.i(TAG, "📵 Call ended (IDLE) - auto-stopping ringer")
             AppLog.log("📵 Call ended - auto-stopping ringer", applicationContext)
             

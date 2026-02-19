@@ -94,10 +94,21 @@ class MainActivity : ComponentActivity() {
                     // That's OK - they're always accessible
                 }
                 
+                // Resolve and save the display name NOW (while we have guaranteed access)
+                val displayName = try {
+                    val ringtone = android.media.RingtoneManager.getRingtone(this, uri)
+                    val title = ringtone?.getTitle(this)
+                    if (!title.isNullOrBlank() && !title.all { it.isDigit() } && title.length > 1) title
+                    else uri.lastPathSegment ?: "Custom Sound"
+                } catch (_: Exception) {
+                    uri.lastPathSegment ?: "Custom Sound"
+                }
+                
                 EmergencyContactRepository.setRingtoneUri(this, uri.toString())
+                EmergencyContactRepository.setRingtoneName(this, displayName)
                 // Auto-switch to "Custom Sound" when user picks a ringtone
                 EmergencyContactRepository.setRingtoneSource(this, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
-                Toast.makeText(this, "Ringtone selected!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Ringtone selected: $displayName", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -106,11 +117,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         EmergencyContactRepository.init(this)
         
-        // Request READ_PHONE_STATE permission for call end detection
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.READ_PHONE_STATE), 1001)
-            }
+        // Request phone state permission for call end detection
+        // Android 13+ uses READ_BASIC_PHONE_STATE, older uses READ_PHONE_STATE
+        val phonePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            android.Manifest.permission.READ_BASIC_PHONE_STATE
+        } else {
+            android.Manifest.permission.READ_PHONE_STATE
+        }
+        if (checkSelfPermission(phonePermission) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(phonePermission), 1001)
         }
 
         setContent {
