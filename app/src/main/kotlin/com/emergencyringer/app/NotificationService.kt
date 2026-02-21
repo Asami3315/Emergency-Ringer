@@ -1,6 +1,9 @@
 package com.emergencyringer.app
 
 import android.app.Notification
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.RingtoneManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -44,6 +47,24 @@ class NotificationService : NotificationListenerService() {
             "com.xiaomi.incallui",
             "android"
         )
+
+        // Packages that send message notifications
+        private val MESSAGE_PACKAGES = setOf(
+            "com.whatsapp",
+            "com.whatsapp.w4b",
+            "org.telegram.messenger",
+            "org.telegram.plus",
+            "com.facebook.orca",     // Messenger
+            "com.google.android.apps.messaging", // Google Messages (SMS)
+            "com.android.mms",       // Stock SMS
+            "com.samsung.android.messaging",
+            "com.xiaomi.msg",
+            "com.huawei.mms"
+        )
+
+        // Dedup: track last message alert per sender (avoid sound from same notification repost)
+        private val lastMessageAlertTime = mutableMapOf<String, Long>()
+        private const val MESSAGE_ALERT_COOLDOWN_MS = 3_000L // 3 seconds — prevents same-notification duplicate only
         
         // Track last triggered call to prevent re-triggering
         @Volatile
@@ -193,8 +214,15 @@ class NotificationService : NotificationListenerService() {
         // Log ALL notifications for debugging (helps identify the right package)
         AppLog.log("📥 [$pkg]", applicationContext)
         
-        if (pkg !in MONITORED_PACKAGES) {
-            if (pkg.contains("phone", true) || pkg.contains("call", true) || pkg.contains("dialer", true) || pkg.contains("telecom", true) || pkg.contains("whatsapp", true)) {
+        // Handle message notifications (separate from call notifications)
+        if (pkg in MESSAGE_PACKAGES) {
+            handleMessageNotification(sbn)
+            // Message packages can also be call packages (WhatsApp), so fall through
+            if (pkg !in MONITORED_PACKAGES) return
+        } else if (pkg !in MONITORED_PACKAGES) {
+            if (pkg.contains("phone", true) || pkg.contains("call", true) ||
+                pkg.contains("dialer", true) || pkg.contains("telecom", true) ||
+                pkg.contains("whatsapp", true)) {
                 Log.i(TAG, "⚠️  Unmonitored package (add if needed): $pkg")
                 AppLog.log("⚠️ Add this package?: $pkg", applicationContext)
             }
@@ -322,5 +350,85 @@ class NotificationService : NotificationListenerService() {
         lastTriggerSbnKey = null
         ringerWasTriggered = false
         RingerManager.stopCurrentRinger()
+    }
+
+    /**
+     * Checks if a message notification is from an emergency contact.
+     * If so, and message alerts are enabled, plays the default notification sound.
+     */
+    private fun handleMessageNotification(sbn: StatusBarNotification) {
+        // Feature must be enabled by user
+        if (!EmergencyContactRepository.isMessageAlertEnabled(applicationContext)) return
+        if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) return
+
+        val notification = sbn.notification ?: return
+        val extras = notification.extras ?: return
+
+        // Skip call-type and missed-call notifications entirely
+        val isCall = notification.category == Notification.CATEGORY_CALL ||
+            notification.category == Notification.CATEGORY_MISSED_CALL
+        if (isCall) return
+
+        // Must be a message/email category OR have text — skip generic system notifications
+        val isMessage = notification.category == Notification.CATEGORY_MESSAGE ||
+            notification.category == Notification.CATEGORY_EMAIL ||
+            notification.category == null
+        if (!isMessage) return
+
+        // Extract sender name — try conversation title first, then regular title
+        val title     = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
+            ?: extras.getCharSequence(NotificationCompat.EXTRA_TITLE)?.toString() ?: ""
+        val text      = extras.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString() ?: ""
+        val combined  = "$title $text"
+
+        Log.i(TAG, "💬 MSG pkg=${sbn.packageName} cat=${notification.category} title='$title' text='$text'")
+        AppLog.log("💬 MSG title='$title' text='$text'", applicationContext)
+
+        // Match whitelist against combined sender info
+        val whitelist = EmergencyContactRepository.getWhitelistedNames(applicationContext)
+        val matchesWhitelist = whitelist.any {
+            ContactNormalizer.matches(it, title) || ContactNormalizer.matches(it, combined)
+        }
+        Log.i(TAG, "💬 Whitelist=$whitelist matchesMsg=$matchesWhitelist")
+        AppLog.log("💬 Whitelist match=$matchesWhitelist for '$title'", applicationContext)
+        if (!matchesWhitelist) return
+
+        // 30-second cooldown per sender — avoids sound spam from rapid messages
+        val now = System.currentTimeMillis()
+        val lastAlert = lastMessageAlertTime[title] ?: 0L
+        if (now - lastAlert < MESSAGE_ALERT_COOLDOWN_MS) {
+            Log.i(TAG, "⏭️ Message alert cooldown for: $title")
+            return
+        }
+        lastMessageAlertTime[title] = now
+
+        Log.i(TAG, "� MESSAGE ALERT: emergency contact '$title' sent a message")
+        AppLog.log("� Message alert: $title", applicationContext)
+        EmergencyContactRepository.addTriggerRecord(title, "Message from contact")
+        playMessageAlert()
+    }
+
+    /** Plays the phone's default notification sound through the ALARM stream (bypasses DND). */
+    private fun playMessageAlert() {
+        try {
+            val am = applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager
+            // Use STREAM_ALARM — it bypasses DND on all Android versions including MIUI
+            val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
+
+            // Play notification ringtone through the alarm audio path
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val rt  = RingtoneManager.getRingtone(applicationContext, uri)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                rt?.audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)          // DND bypass
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            }
+            rt?.play()
+            Log.i(TAG, "🔔 Message alert sound played (ALARM stream)")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ playMessageAlert failed: ${e.message}")
+        }
     }
 }

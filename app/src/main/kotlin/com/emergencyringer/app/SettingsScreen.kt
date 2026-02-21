@@ -186,6 +186,67 @@ fun SettingsScreen(
                     }
                 }
                 // ═══════════════════════════════════════
+                // MESSAGE ALERTS
+                // ═══════════════════════════════════════
+                SettingsSectionCard(title = "Message Alerts", vibrantPurple = vibrantPurple) {
+                    var messageAlertEnabled by remember {
+                        mutableStateOf(EmergencyContactRepository.isMessageAlertEnabled(context))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Emergency Contact Messages",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color.White
+                            )
+                            Text(
+                                "Play notification sound when an emergency contact messages you on WhatsApp, SMS, Telegram, etc.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF9CA3AF),
+                                lineHeight = 15.sp,
+                                modifier = Modifier.padding(top = 2.dp, end = 12.dp)
+                            )
+                        }
+                        Switch(
+                            checked = messageAlertEnabled,
+                            onCheckedChange = {
+                                messageAlertEnabled = it
+                                EmergencyContactRepository.setMessageAlertEnabled(context, it)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = vibrantPurple,
+                                uncheckedThumbColor = Color(0xFF9CA3AF),
+                                uncheckedTrackColor = Color(0xFF374151)
+                            )
+                        )
+                    }
+                    if (messageAlertEnabled) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF7C3AED).copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, null, tint = vibrantPurple, modifier = Modifier.size(16.dp))
+                            Text(
+                                "Plays phone's default notification sound when any emergency contact sends you a message.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF9CA3AF),
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+
+                // ═══════════════════════════════════════
                 // ALARM BEHAVIOR
                 // ═══════════════════════════════════════
                 SettingsSectionCard(title = "Alarm Behavior", vibrantPurple = vibrantPurple) {

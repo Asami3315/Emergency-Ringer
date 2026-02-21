@@ -181,7 +181,18 @@ object EmergencyContactRepository {
     // ═══════════════════════════════════════
     // SETTINGS PREFERENCES
     // ═══════════════════════════════════════
-    
+
+    // Message alert (notify when emergency contact sends a message)
+    private const val KEY_MESSAGE_ALERT_ENABLED = "message_alert_enabled"
+
+    fun setMessageAlertEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_MESSAGE_ALERT_ENABLED, enabled).apply()
+    }
+
+    fun isMessageAlertEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_MESSAGE_ALERT_ENABLED, false) // Default OFF
+    }
+
     // Auto-stop timer (in milliseconds)
     private const val KEY_AUTO_STOP_DURATION = "auto_stop_duration"
     private const val DEFAULT_AUTO_STOP_MS = 30_000L  // 30 seconds
