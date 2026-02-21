@@ -51,6 +51,11 @@ class NotificationService : NotificationListenerService() {
         @Volatile
         private var lastTriggerTime: Long = 0
         
+        // Key of the exact notification that triggered the alarm
+        // onNotificationRemoved uses this to stop ONLY the right alarm
+        @Volatile
+        var lastTriggerSbnKey: String? = null
+        
         // Track if we triggered the ringer (so we know to auto-stop)
         @Volatile
         var ringerWasTriggered = false
@@ -180,30 +185,6 @@ class NotificationService : NotificationListenerService() {
             // manualStopTime is set inside stopCurrentRinger() — blocks missed-call re-trigger
         }
     }
-    
-    /**
-     * Fallback for MIUI/Redmi: stop alarm when the call notification is removed.
-     * On many Redmi phones READ_PHONE_STATE requires a runtime grant the user may skip,
-     * so onNotificationRemoved is the most reliable call-end signal.
-     */
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (sbn == null) return
-        val pkg = sbn.packageName ?: return
-        
-        // Only care about monitored packages (phone/dialer/WhatsApp)
-        if (pkg !in MONITORED_PACKAGES) return
-        
-        // Only stop if the ringer is actually playing
-        val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
-        if (!ringerActive) return
-        
-        Log.i(TAG, "📵 Call notification removed ($pkg) - stopping alarm")
-        AppLog.log("📵 Notification removed ($pkg) - stopping alarm", applicationContext)
-        
-        ringerWasTriggered = false
-        RingerManager.stopCurrentRinger()
-    }
-
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
@@ -257,20 +238,15 @@ class NotificationService : NotificationListenerService() {
         
         if (!isIncomingCall) return
 
-        val whitelist = EmergencyContactRepository.getWhitelistedNames(applicationContext)
-        if (whitelist.isEmpty()) {
-            Log.w(TAG, "⚠️  Whitelist empty - add emergency contacts in app")
-            AppLog.log("⚠️ Whitelist empty!", applicationContext)
+        // Skip missed-call / call-ended notifications by category or text
+        // (these arrive after the call ends and should never re-trigger the alarm)
+        val isMissedCall = notification.category == android.app.Notification.CATEGORY_MISSED_CALL ||
+            combinedText.contains("missed", ignoreCase = true) ||
+            title.contains("missed", ignoreCase = true)
+        if (isMissedCall) {
+            Log.i(TAG, "⏭️ Skipping missed-call notification")
             return
         }
-
-        // Match whitelist against title OR text (caller name can be in either)
-        val callerText = "$title $text $bigText $subText"
-        val matches = whitelist.any { ContactNormalizer.matches(it, callerText) }
-        Log.i(TAG, "🎯 Whitelist=$whitelist | Matches=$matches (checked: $callerText)")
-        AppLog.log("🎯 Whitelist=$whitelist | Match=$matches", applicationContext)
-        
-        if (!matches) return
 
         // Check if monitoring is enabled
         if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
@@ -278,33 +254,73 @@ class NotificationService : NotificationListenerService() {
             AppLog.log("⏸️ Monitoring disabled - ringer not triggered", applicationContext)
             return
         }
-        
-        // Prevent re-triggering for the same caller within 60 seconds
-        // (avoids restart when "call ended" / "missed call" notification appears)
+
+        val callerText = "$title $text $bigText $subText"
+        val callerName = title.ifBlank { text }.trim()
+
+        // Prevent re-triggering for the SAME call within 60 seconds ONLY if alarm is still ringing
+        // (guards against the same notification being posted multiple times during one call)
         val currentTime = System.currentTimeMillis()
-        if (lastTriggeredCaller == callerText && (currentTime - lastTriggerTime) < 60_000) {
-            Log.i(TAG, "⏭️ Skipping - same caller triggered recently (prevents restart)")
-            AppLog.log("⏭️ Skip - already triggered for this call", applicationContext)
-            return
-        }
-        
-        // Block re-trigger if user manually stopped alarm within last 90 seconds
-        // This prevents "missed call" / "call ended" notifications from double-ringing
-        val timeSinceManualStop = currentTime - EmergencyContactRepository.manualStopTime
-        if (EmergencyContactRepository.manualStopTime > 0 && timeSinceManualStop < 90_000) {
-            Log.i(TAG, "⏭️ Skipping - alarm was stopped ${timeSinceManualStop / 1000}s ago")
-            AppLog.log("⏭️ Blocked - user stopped alarm ${timeSinceManualStop / 1000}s ago", applicationContext)
+        if (lastTriggeredCaller == callerText
+            && (currentTime - lastTriggerTime) < 60_000
+            && EmergencyContactRepository.isRingerPlaying) {
+            Log.i(TAG, "⏭️ Skipping - same caller, alarm already playing")
+            AppLog.log("⏭️ Skip - alarm already playing for this call", applicationContext)
             return
         }
 
-        Log.i(TAG, "🚨 EMERGENCY CALL - triggering ringer for: $title")
-        AppLog.log("🚨 EMERGENCY - triggering ringer for: $title", applicationContext)
-        
-        // Update tracking before triggering
-        lastTriggeredCaller = callerText
-        lastTriggerTime = currentTime
-        ringerWasTriggered = true
-        
-        RingerManager.triggerEmergencyRinger(applicationContext)
+        // PATH A: Emergency contact matched → trigger immediately
+        val whitelist = EmergencyContactRepository.getWhitelistedNames(applicationContext)
+        val matchesWhitelist = whitelist.any { ContactNormalizer.matches(it, callerText) }
+        Log.i(TAG, "🎯 Whitelist=$whitelist | Matches=$matchesWhitelist (checked: $callerText)")
+        AppLog.log("🎯 Whitelist match=$matchesWhitelist caller='$callerName'", applicationContext)
+
+        if (matchesWhitelist) {
+            Log.i(TAG, "🚨 EMERGENCY CONTACT - triggering ringer for: $callerName")
+            AppLog.log("🚨 EMERGENCY CONTACT: $callerName", applicationContext)
+            lastTriggeredCaller = callerText
+            lastTriggerTime = currentTime
+            lastTriggerSbnKey = sbn.key  // store so onNotificationRemoved knows which to stop on
+            ringerWasTriggered = true
+            EmergencyContactRepository.addTriggerRecord(callerName, "Emergency Contact")
+            RingerManager.triggerEmergencyRinger(applicationContext)
+            return
+        }
+
+        // PATH B: Not in whitelist → track repeated calls (3 within 1 hour = emergency)
+        val callerKey = callerName.lowercase().trim()
+        val callCount = EmergencyContactRepository.recordIncomingCall(callerKey)
+        Log.i(TAG, "🔁 Repeated caller '$callerKey' count=$callCount/${EmergencyContactRepository.REPEATED_CALL_THRESHOLD}")
+        AppLog.log("🔁 '$callerName' called $callCount/${EmergencyContactRepository.REPEATED_CALL_THRESHOLD} times", applicationContext)
+
+        if (callCount >= EmergencyContactRepository.REPEATED_CALL_THRESHOLD) {
+            Log.i(TAG, "🚨 REPEATED CALLER ($callCount×) - triggering ringer for: $callerName")
+            AppLog.log("🚨 REPEATED CALLER $callCount×: $callerName", applicationContext)
+            lastTriggeredCaller = callerText
+            lastTriggerTime = currentTime
+            lastTriggerSbnKey = sbn.key
+            ringerWasTriggered = true
+            EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)")
+            // Reset count so they need 3 more calls to trigger again
+            EmergencyContactRepository.resetCallCount(callerKey)
+            RingerManager.triggerEmergencyRinger(applicationContext)
+        }
+    }
+
+    /**
+     * Stops the alarm when the EXACT notification that triggered it is removed.
+     * Key guard prevents the first call's removal from stopping the second call's alarm.
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        if (sbn == null) return
+        // Only act on the specific notification that triggered this alarm
+        if (sbn.key != lastTriggerSbnKey) return
+        val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
+        if (!ringerActive) return
+        Log.i(TAG, "📵 Trigger notification removed (${sbn.packageName}) - stopping alarm")
+        AppLog.log("📵 Notification removed - stopping alarm", applicationContext)
+        lastTriggerSbnKey = null
+        ringerWasTriggered = false
+        RingerManager.stopCurrentRinger()
     }
 }

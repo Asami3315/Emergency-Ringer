@@ -2,6 +2,9 @@ package com.emergencyringer.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val PREFS_NAME = "emergency_contacts"
 private const val KEY_CONTACTS = "whitelist"
@@ -20,6 +23,74 @@ object EmergencyContactRepository {
                 return if (parts.size >= 2) Contact(parts[0], parts[1]) else null
             }
         }
+    }
+
+    // ═══════════════════════════════════════
+    // CALL HISTORY & REPEATED-CALLER TRACKING
+    // ═══════════════════════════════════════
+
+    /** A single alarm trigger event shown in Recent Triggers history. */
+    data class CallRecord(
+        val callerName: String,
+        val reason: String,         // "Emergency Contact" or "Repeated Caller (3×)"
+        val timestampMs: Long = System.currentTimeMillis()
+    ) {
+        val timeLabel: String get() =
+            SimpleDateFormat("hh:mm a, dd MMM", Locale.getDefault()).format(Date(timestampMs))
+    }
+
+    /** Number of calls from same unknown number to trigger repeated-caller alarm. */
+    const val REPEATED_CALL_THRESHOLD = 3
+    /** Time window for repeated-caller detection (1 hour). */
+    private const val REPEATED_CALL_WINDOW_MS = 60 * 60 * 1000L
+
+    /** In-memory call timestamps per caller key (resets on service restart). */
+    private val recentCallTimestamps: MutableMap<String, MutableList<Long>> = mutableMapOf()
+
+    /** Trigger history shown in Recent Triggers UI (max 50 entries). */
+    private val triggerHistory: MutableList<CallRecord> = mutableListOf()
+
+    /**
+     * Record an incoming call from [callerKey].
+     * Prunes calls older than 1 hour, then returns current count within window.
+     */
+    fun recordIncomingCall(callerKey: String): Int {
+        val now = System.currentTimeMillis()
+        val timestamps = recentCallTimestamps.getOrPut(callerKey) { mutableListOf() }
+        // Remove entries older than 1 hour
+        timestamps.removeAll { now - it > REPEATED_CALL_WINDOW_MS }
+        timestamps.add(now)
+        return timestamps.size
+    }
+
+    /** Returns how many times [callerKey] has called within the last hour. */
+    fun getRecentCallCount(callerKey: String): Int {
+        val now = System.currentTimeMillis()
+        return recentCallTimestamps[callerKey]
+            ?.count { now - it <= REPEATED_CALL_WINDOW_MS } ?: 0
+    }
+
+    /** Add a trigger event to the history (shown in Recent Triggers screen). */
+    fun addTriggerRecord(callerName: String, reason: String) {
+        synchronized(triggerHistory) {
+            triggerHistory.add(0, CallRecord(callerName, reason))
+            if (triggerHistory.size > 50) triggerHistory.removeLastOrNull()
+        }
+    }
+
+    /** Returns a snapshot of the trigger history list. */
+    fun getTriggerHistory(): List<CallRecord> = synchronized(triggerHistory) {
+        triggerHistory.toList()
+    }
+
+    /** Clears the trigger history. */
+    fun clearTriggerHistory() = synchronized(triggerHistory) {
+        triggerHistory.clear()
+    }
+
+    /** Resets the call count for [callerKey] after they triggered the repeated-caller alarm. */
+    fun resetCallCount(callerKey: String) {
+        recentCallTimestamps.remove(callerKey)
     }
 
     private var prefs: SharedPreferences? = null
@@ -103,14 +174,9 @@ object EmergencyContactRepository {
         return getPrefs(context).getString(KEY_RINGTONE_NAME, null)
     }
     
-    // Ringer playing state (to show End Call button)
+    // Ringer playing state
     @Volatile
     var isRingerPlaying: Boolean = false
-    
-    // Timestamp when user manually stopped the ringer (0 = not stopped)
-    // Used to block missed-call/call-ended notifications from re-triggering alarm
-    @Volatile
-    var manualStopTime: Long = 0
     
     // ═══════════════════════════════════════
     // SETTINGS PREFERENCES

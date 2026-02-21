@@ -316,8 +316,6 @@ object RingerManager {
         stopFlashlight()
         
         EmergencyContactRepository.isRingerPlaying = false
-        // Record when alarm was manually stopped — prevents missed-call from re-triggering
-        EmergencyContactRepository.manualStopTime = System.currentTimeMillis()
     }
     
     // ═══════════════════════════════════════

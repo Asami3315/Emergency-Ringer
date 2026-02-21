@@ -722,6 +722,90 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(10.dp))
 
+                // ────────────────────────────────────────────────
+                // RECENT TRIGGERS
+                // ────────────────────────────────────────────────
+                var triggerHistory by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory()) }
+
+                SettingsSectionCard(title = "Recent Triggers", vibrantPurple = vibrantPurple) {
+                    if (triggerHistory.isEmpty()) {
+                        Text(
+                            "No triggers yet. Alarm events will appear here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF888888),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        triggerHistory.forEach { record ->
+                            val isRepeated = record.reason.startsWith("Repeated")
+                            val badgeColor = if (isRepeated) Color(0xFFEF4444) else Color(0xFF7C3AED)
+                            val badgeLabel = if (isRepeated) "REPEATED" else "CONTACT"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Coloured badge
+                                Box(
+                                    modifier = Modifier
+                                        .background(badgeColor.copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        badgeLabel,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.sp
+                                        ),
+                                        color = badgeColor
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        record.callerName.ifBlank { "Unknown" },
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        record.reason,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF9CA3AF)
+                                    )
+                                }
+                                Text(
+                                    record.timeLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF6B7280)
+                                )
+                            }
+                            if (record != triggerHistory.last()) {
+                                Divider(
+                                    color = Color.White.copy(alpha = 0.06f),
+                                    thickness = 0.5.dp
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                EmergencyContactRepository.clearTriggerHistory()
+                                triggerHistory = emptyList()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Clear History", color = Color(0xFFEF4444), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
                 // Footer
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
