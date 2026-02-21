@@ -107,6 +107,11 @@ object EmergencyContactRepository {
     @Volatile
     var isRingerPlaying: Boolean = false
     
+    // Timestamp when user manually stopped the ringer (0 = not stopped)
+    // Used to block missed-call/call-ended notifications from re-triggering alarm
+    @Volatile
+    var manualStopTime: Long = 0
+    
     // ═══════════════════════════════════════
     // SETTINGS PREFERENCES
     // ═══════════════════════════════════════

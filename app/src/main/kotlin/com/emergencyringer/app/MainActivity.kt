@@ -179,7 +179,23 @@ class MainActivity : ComponentActivity() {
         val nm = getSystemService(NotificationManager::class.java) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!nm.isNotificationPolicyAccessGranted) {
-                startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                // Try to open our app's specific DND settings page directly
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Android 10+ supports deep-linking directly to our app's DND page
+                    // Use string literals since constants may not be in older SDK imports
+                    Intent("android.settings.NOTIFICATION_POLICY_ACCESS_DETAIL_SETTINGS").apply {
+                        putExtra("android.provider.extra.APP_PACKAGE", packageName)
+                    }
+                } else {
+                    // Fallback: open the general DND access list
+                    Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                }
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    // If deep-link fails, fall back to general settings
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                }
             }
         }
     }
@@ -436,28 +452,8 @@ fun MainScreen(
                 onRequestBattery = onRequestBatteryOptimization
             )
 
-            Spacer(Modifier.height(20.dp))
 
-            // Emergency Ringer Controls - Only show End Call when ringing
-            if (isRingerPlaying) {
-                Button(
-                    onClick = onStopRinger,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFEF4444),  // Red for stop
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(Icons.Default.Stop, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("End Call", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                }
-            }
 
-            Spacer(Modifier.height(28.dp))
 
             // Contacts Header
             Row(

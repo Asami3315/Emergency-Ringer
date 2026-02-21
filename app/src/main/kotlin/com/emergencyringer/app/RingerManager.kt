@@ -14,12 +14,14 @@ import android.os.Vibrator
 import android.os.VibrationEffect
 import android.hardware.camera2.CameraManager
 import android.app.NotificationManager
+import android.telephony.TelephonyManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 
 /**
  * Overrides silent/DND and plays alarm sound.
@@ -33,10 +35,12 @@ object RingerManager {
 
     @Volatile
     private var mediaPlayer: MediaPlayer? = null
+    private var ringtone: android.media.Ringtone? = null  // Ringtone API fallback
     private var toneGenerator: ToneGenerator? = null
     private var sirenJob: Job? = null
     private var vibrator: Vibrator? = null
     private var flashlightJob: Job? = null
+    private var callStateWatcherJob: Job? = null  // polls call state every 1s to auto-stop alarm
     
     private var stopHandler: Handler? = null
     private var stopRunnable: Runnable? = null
@@ -49,253 +53,221 @@ object RingerManager {
         Log.i(TAG, "═══════════════════════════════════════")
         Log.i(TAG, "EMERGENCY RINGER TRIGGERED!")
         Log.i(TAG, "═══════════════════════════════════════")
-        AppLog.log("═══════════════════════════════════════", context)
         AppLog.log("🔔 EMERGENCY RINGER TRIGGERED!", context)
-        
+
         try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                ?: run { AppLog.log("❌ AudioManager null!", context); return }
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
 
-            if (am == null) {
-                Log.e(TAG, "❌ AudioManager is null!")
-                AppLog.log("❌ AudioManager is null!", context)
-                return
-            }
-
             // ══════════════════════════════════════
-            // LOG CURRENT STATE (BEFORE CHANGES)
+            // STEP 1: Disable DND (if permission granted)
             // ══════════════════════════════════════
-            val currentRingerMode = am.ringerMode
-            val ringerModeName = when (currentRingerMode) {
-                AudioManager.RINGER_MODE_SILENT -> "SILENT"
-                AudioManager.RINGER_MODE_VIBRATE -> "VIBRATE"
-                AudioManager.RINGER_MODE_NORMAL -> "NORMAL"
-                else -> "UNKNOWN"
-            }
-            val currentVolume = am.getStreamVolume(AudioManager.STREAM_RING)
-            val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_RING)
-            
-            AppLog.log("📊 BEFORE: Ringer=$ringerModeName, Vol=$currentVolume/$maxVolume", context)
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val currentFilter = nm?.currentInterruptionFilter ?: -1
-                val filterName = when (currentFilter) {
-                    NotificationManager.INTERRUPTION_FILTER_NONE -> "TOTAL SILENCE"
-                    NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "DND (Priority)"
-                    NotificationManager.INTERRUPTION_FILTER_ALARMS -> "DND (Alarms)"
-                    NotificationManager.INTERRUPTION_FILTER_ALL -> "OFF (Normal)"
-                    else -> "UNKNOWN($currentFilter)"
-                }
-                val hasAccess = nm?.isNotificationPolicyAccessGranted == true
-                AppLog.log("📵 DND Status: $filterName | Access=$hasAccess", context)
-                Log.i(TAG, "📵 DND=$filterName Access=$hasAccess")
-            }
-
-            // ══════════════════════════════════════
-            // STEP 1: Bypass DND
-            // ══════════════════════════════════════
-            // The MediaPlayer uses USAGE_ALARM which bypasses DND natively on most devices.
-            // We also call setInterruptionFilter as an extra guarantee.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm != null) {
                 val hasAccess = nm.isNotificationPolicyAccessGranted
-                AppLog.log("🔕 DND access=$hasAccess | filter=${nm.currentInterruptionFilter}", context)
-                
-                if (hasAccess) {
+                val currentFilter = nm.currentInterruptionFilter
+                AppLog.log("🔕 DND: filter=$currentFilter access=$hasAccess", context)
+                if (hasAccess && currentFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
                     try {
                         nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
-                        AppLog.log("✅ DND disabled via setInterruptionFilter", context)
+                        AppLog.log("✅ DND turned OFF", context)
                     } catch (e: Exception) {
-                        AppLog.log("⚠️ setInterruptionFilter failed: ${e.message}", context)
+                        AppLog.log("⚠️ DND off failed: ${e.message}", context)
                     }
-                } else {
-                    AppLog.log("⚠️ No DND access - USAGE_ALARM will bypass DND natively", context)
+                } else if (!hasAccess) {
+                    AppLog.log("⚠️ No DND permission - alarm uses USAGE_ALARM to bypass", context)
                 }
             }
 
             // ══════════════════════════════════════
-            // STEP 2: Unmute ALARM stream to max
+            // STEP 2: Max ALARM volume (bypasses DND)
             // ══════════════════════════════════════
-            // DO NOT touch ringerMode - it interferes with DND on many phones.
-            // Just set ALARM stream to max and mute RING to prevent dual ringtone.
             try {
-                // Unmute alarm stream first (in case it was muted)
                 am.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0)
-                // Set alarm to max volume
                 val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                 am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
-                AppLog.log("🔔 Alarm Vol: ${am.getStreamVolume(AudioManager.STREAM_ALARM)}/$maxAlarm ✅", context)
+                AppLog.log("🔔 Alarm vol = $maxAlarm/$maxAlarm", context)
             } catch (e: Exception) {
-                AppLog.log("⚠️ Alarm volume error: ${e.message}", context)
+                AppLog.log("⚠️ Alarm vol error: ${e.message}", context)
             }
 
             // ══════════════════════════════════════
-            // STEP 3: Mute RING stream (prevents dual ringtone)
+            // STEP 3: Mute RING stream (no dual ringtone)
+            // NOTE: Do NOT set ringerMode - it can re-enable DND!
             // ══════════════════════════════════════
-            // Mute RING to 0 so phone's default ringtone doesn't play alongside our alarm.
-            // We do NOT change ringerMode - that would re-trigger DND on many devices.
             try {
                 am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
-                AppLog.log("🔇 Ring stream muted (prevents dual ringtone)", context)
-            } catch (e: Exception) {
-                AppLog.log("⚠️ Ring mute error: ${e.message}", context)
-            }
+                AppLog.log("🔇 Ring muted", context)
+            } catch (_: Exception) {}
 
             // ══════════════════════════════════════
-            // STEP 4: Play alarm sound based on type
+            // STEP 4: Play alarm sound
             // ══════════════════════════════════════
             stopCurrentRinger()
-            try {
-                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-                val wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "EmergencyRinger::WakeLock")
-                wakeLock?.acquire(60_000)
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "EmergencyRinger::WakeLock")
+            wakeLock?.acquire(60_000)
 
-                // Get sound type (use temp override if provided, otherwise use saved setting)
-                val soundType = tempSoundType ?: EmergencyContactRepository.getAlarmSoundType(context)
-                
-                when (soundType) {
-                    EmergencyContactRepository.SOUND_TYPE_BEEP -> {
-                        // Beep sound using ToneGenerator
-                        AppLog.log("🔔 Playing BEEP alarm", context)
-                        val volumePercent = EmergencyContactRepository.getVolumePercent(context)
-                        val toneVolume = (volumePercent * 100 / 100).coerceIn(0, 100)
-                        
-                        toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, toneVolume)
-                        EmergencyContactRepository.isRingerPlaying = true
-                        
-                        // Play repeating beep pattern in background
-                        CoroutineScope(Dispatchers.Default).launch {
-                            try {
-                                while (EmergencyContactRepository.isRingerPlaying) {
-                                    toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
-                                    delay(500)
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Beep sound error: ${e.message}")
+            val soundType = tempSoundType ?: EmergencyContactRepository.getAlarmSoundType(context)
+            val volumePercent = EmergencyContactRepository.getVolumePercent(context)
+
+            when (soundType) {
+                EmergencyContactRepository.SOUND_TYPE_BEEP -> {
+                    AppLog.log("🔔 Playing BEEP", context)
+                    val toneVolume = volumePercent.coerceIn(0, 100)
+                    toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, toneVolume)
+                    EmergencyContactRepository.isRingerPlaying = true
+                    CoroutineScope(Dispatchers.Default).launch {
+                        try {
+                            while (EmergencyContactRepository.isRingerPlaying) {
+                                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
+                                delay(500)
                             }
-                        }
+                        } catch (e: Exception) { Log.e(TAG, "Beep error: ${e.message}") }
                     }
-                    
-                    EmergencyContactRepository.SOUND_TYPE_SIREN -> {
-                        // Siren sound using oscillating tones
-                        AppLog.log("🚨 Playing SIREN alarm", context)
-                        val volumePercent = EmergencyContactRepository.getVolumePercent(context)
-                        val toneVolume = (volumePercent * 100 / 100).coerceIn(0, 100)
-                        
-                        toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, toneVolume)
-                        EmergencyContactRepository.isRingerPlaying = true
-                        
-                        // Create alternating high-low siren pattern
-                        sirenJob = CoroutineScope(Dispatchers.Default).launch {
-                            try {
-                                var high = true
-                                while (EmergencyContactRepository.isRingerPlaying) {
-                                    val tone = if (high) ToneGenerator.TONE_DTMF_1 else ToneGenerator.TONE_DTMF_4
-                                    toneGenerator?.startTone(tone, 400)
-                                    delay(400)
-                                    high = !high
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Siren sound error: ${e.message}")
+                }
+
+                EmergencyContactRepository.SOUND_TYPE_SIREN -> {
+                    AppLog.log("🚨 Playing SIREN", context)
+                    val toneVolume = volumePercent.coerceIn(0, 100)
+                    toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, toneVolume)
+                    EmergencyContactRepository.isRingerPlaying = true
+                    sirenJob = CoroutineScope(Dispatchers.Default).launch {
+                        try {
+                            var high = true
+                            while (EmergencyContactRepository.isRingerPlaying) {
+                                toneGenerator?.startTone(
+                                    if (high) ToneGenerator.TONE_DTMF_1 else ToneGenerator.TONE_DTMF_4, 400
+                                )
+                                delay(400)
+                                high = !high
                             }
-                        }
+                        } catch (e: Exception) { Log.e(TAG, "Siren error: ${e.message}") }
                     }
-                    
-                    else -> {
-                        // Ringtone (default or custom)
-                        AppLog.log("🎵 Playing RINGTONE alarm", context)
+                }
+
+                else -> {
+                    // Ringtone — try MediaPlayer first, fall back to Ringtone API
+                    AppLog.log("🎵 Playing RINGTONE", context)
+
+                    val ringtoneSource = EmergencyContactRepository.getRingtoneSource(context)
+                    val uri = if (ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM) {
+                        EmergencyContactRepository.getRingtoneUri(context)
+                            ?.let { android.net.Uri.parse(it) }
+                            ?: RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
+                    } else {
+                        RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+                            ?: getAlarmUri(context)
+                    }
+                    AppLog.log("🎵 URI: $uri", context)
+
+                    // Try MediaPlayer (USAGE_ALARM bypasses DND natively)
+                    var playerStarted = false
+                    try {
                         val player = MediaPlayer().apply {
                             setAudioAttributes(
                                 AudioAttributes.Builder()
                                     .setUsage(AudioAttributes.USAGE_ALARM)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                     .build()
                             )
                             isLooping = true
-                            setOnCompletionListener { release() }
-                            setOnErrorListener { _, _, _ -> release(); true }
                         }
-                        
-                        // Use ringtone based on source preference
-                        val ringtoneSource = EmergencyContactRepository.getRingtoneSource(context)
-                        val uri = if (ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM) {
-                            val customUri = EmergencyContactRepository.getRingtoneUri(context)
-                            if (customUri != null) android.net.Uri.parse(customUri)
-                            else RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
-                        } else {
-                            // Phone ringtone - use the device's default ringtone
-                            RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
-                                ?: getAlarmUri(context)
-                        }
-                        
                         player.setDataSource(context, uri)
                         player.prepare()
-                        
-                        // Apply volume from settings
-                        val volumePercent = EmergencyContactRepository.getVolumePercent(context)
-                        val volume = volumePercent / 100f
-                        player.setVolume(volume, volume)
-                        
+                        val vol = volumePercent / 100f
+                        player.setVolume(vol, vol)
                         player.start()
                         mediaPlayer = player
                         EmergencyContactRepository.isRingerPlaying = true
-                        player.setOnCompletionListener { 
-                            wakeLock?.let { if (it.isHeld) it.release() }
-                            EmergencyContactRepository.isRingerPlaying = false
-                            stopVibration()
-                            stopFlashlight()
+                        playerStarted = true
+                        AppLog.log("✅ MediaPlayer started (USAGE_ALARM)", context)
+                    } catch (e: Exception) {
+                        AppLog.log("⚠️ MediaPlayer failed: ${e.message} - trying Ringtone API", context)
+                        Log.e(TAG, "MediaPlayer failed: ${e.message}", e)
+                    }
+
+                    // Fallback: Ringtone API also bypasses DND with USAGE_ALARM
+                    if (!playerStarted) {
+                        try {
+                            val rt = RingtoneManager.getRingtone(context, uri ?: getAlarmUri(context))
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                rt?.audioAttributes = AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ALARM)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .build()
+                            }
+                            rt?.play()
+                            ringtone = rt  // store so stopCurrentRinger() can stop it
+                            EmergencyContactRepository.isRingerPlaying = true
+                            AppLog.log("✅ Ringtone API fallback started", context)
+                        } catch (e2: Exception) {
+                            AppLog.log("❌ Both audio methods failed: ${e2.message}", context)
                         }
                     }
                 }
-                
-                // Use provided duration or get from settings
-                val autoStopDuration = durationMs ?: EmergencyContactRepository.getAutoStopDuration(context)
-                AppLog.log("🎵 Alarm PLAYING! (auto-stop in ${autoStopDuration / 1000}s)", context)
-                
-                // Start vibration if enabled (skip for preview mode)
-                if (durationMs == null && EmergencyContactRepository.isVibrateEnabled(context)) {
-                    startVibration(context)
-                }
-                
-                // Start flashlight strobe if enabled (skip for preview mode)
-                if (durationMs == null && EmergencyContactRepository.isFlashlightEnabled(context)) {
-                    startFlashlight(context)
-                }
-                
-                // Schedule auto-stop using settings duration
-                stopHandler = Handler(Looper.getMainLooper())
-                stopRunnable = Runnable {
-                    AppLog.log("⏱️ ${autoStopDuration / 1000}s timeout - stopping alarm", context)
-                    stopCurrentRinger()
-                }
-                stopHandler?.postDelayed(stopRunnable!!, autoStopDuration)
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Alarm sound failed: ${e.message}")
-                AppLog.log("⚠️ Alarm failed: ${e.message}", context)
             }
 
             // ══════════════════════════════════════
-            // FINAL STATUS LOG
+            // STEP 5: Vibration + Flashlight + Auto-stop + Call Watcher
             // ══════════════════════════════════════
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val finalFilter = nm?.currentInterruptionFilter ?: -1
-                val finalDndName = when (finalFilter) {
-                    NotificationManager.INTERRUPTION_FILTER_NONE -> "TOTAL SILENCE"
-                    NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "DND (Priority)"
-                    NotificationManager.INTERRUPTION_FILTER_ALARMS -> "DND (Alarms)"
-                    NotificationManager.INTERRUPTION_FILTER_ALL -> "OFF"
-                    else -> "UNKNOWN"
-                }
-                AppLog.log("📊 AFTER: DND=$finalDndName, Ringer=SILENT, Ring=MUTED, Alarm=MAX", context)
+            val autoStopDuration = durationMs ?: EmergencyContactRepository.getAutoStopDuration(context)
+            AppLog.log("⏱ Auto-stop in ${autoStopDuration / 1000}s", context)
+
+            if (durationMs == null && EmergencyContactRepository.isVibrateEnabled(context)) startVibration(context)
+            if (durationMs == null && EmergencyContactRepository.isFlashlightEnabled(context)) startFlashlight(context)
+
+            stopHandler = Handler(Looper.getMainLooper())
+            stopRunnable = Runnable {
+                AppLog.log("⏱ Timeout - stopping alarm", context)
+                stopCurrentRinger()
             }
-            AppLog.log("═══════════════════════════════════════", context)
-            AppLog.log("✅ OVERRIDE COMPLETE", context)
+            stopHandler?.postDelayed(stopRunnable!!, autoStopDuration)
+            
+            // Start real-time call state watcher (most reliable stop mechanism)
+            if (durationMs == null) startCallStateWatcher(context)
 
         } catch (e: Exception) {
-            Log.e(TAG, "❌ EXCEPTION: ${e.message}", e)
-            AppLog.log("❌ Error: ${e.message}", context)
+            Log.e(TAG, "❌ FATAL: ${e.message}", e)
+            AppLog.log("❌ Fatal error: ${e.message}", context)
         }
     }
+
+    /**
+     * Polls TelephonyManager.getCallState() every second.
+     * Stops alarm as soon as the call is picked up (OFFHOOK) or ended (IDLE).
+     * This is the most reliable approach on MIUI/Redmi where callbacks fail.
+     */
+    private fun startCallStateWatcher(context: Context) {
+        callStateWatcherJob?.cancel()
+        callStateWatcherJob = CoroutineScope(Dispatchers.Default).launch {
+            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                ?: return@launch
+            AppLog.log("📞 Call state watcher started", context)
+            
+            // Wait briefly for the call to fully establish before watching
+            delay(2000)
+            
+            while (isActive && EmergencyContactRepository.isRingerPlaying) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val state = tm.callState  // Works without permission on many devices
+                    if (state == TelephonyManager.CALL_STATE_IDLE ||
+                        state == TelephonyManager.CALL_STATE_OFFHOOK) {
+                        AppLog.log("📞 Watcher: call state=$state → stopping alarm", context)
+                        stopCurrentRinger()
+                        break
+                    }
+                } catch (_: Exception) {}
+                delay(1000)  // Poll every second
+            }
+            AppLog.log("📞 Call state watcher ended", context)
+        }
+    }
+
+
+
+
 
     private fun getAlarmUri(context: Context): android.net.Uri {
         val resId = context.resources.getIdentifier("emergency_ring", "raw", context.packageName)
@@ -314,33 +286,38 @@ object RingerManager {
         stopHandler = null
         stopRunnable = null
         
-        // Stop media player (for ringtone)
+        // Stop media player
         mediaPlayer?.let { mp ->
-            try {
-                if (mp.isPlaying) mp.stop()
-                mp.release()
-            } catch (_: Exception) {}
+            try { if (mp.isPlaying) mp.stop(); mp.release() } catch (_: Exception) {}
             mediaPlayer = null
         }
         
-        // Stop tone generator (for beep and siren)
+        // Stop Ringtone API fallback
+        ringtone?.let { rt ->
+            try { if (rt.isPlaying) rt.stop() } catch (_: Exception) {}
+            ringtone = null
+        }
+        
+        // Stop tone generator (beep/siren)
         toneGenerator?.let { tg ->
-            try {
-                tg.stopTone()
-                tg.release()
-            } catch (_: Exception) {}
+            try { tg.stopTone(); tg.release() } catch (_: Exception) {}
             toneGenerator = null
         }
         
-        // Cancel siren job
+        // Cancel siren coroutine
         sirenJob?.cancel()
         sirenJob = null
         
-        // Stop vibration and flashlight
+        // Cancel call state watcher
+        callStateWatcherJob?.cancel()
+        callStateWatcherJob = null
+        
         stopVibration()
         stopFlashlight()
         
-        EmergencyContactRepository.isRingerPlaying = false  // Clear playing state
+        EmergencyContactRepository.isRingerPlaying = false
+        // Record when alarm was manually stopped — prevents missed-call from re-triggering
+        EmergencyContactRepository.manualStopTime = System.currentTimeMillis()
     }
     
     // ═══════════════════════════════════════

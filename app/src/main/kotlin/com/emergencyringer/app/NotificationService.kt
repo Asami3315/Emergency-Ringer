@@ -164,28 +164,46 @@ class NotificationService : NotificationListenerService() {
             TelephonyManager.CALL_STATE_OFFHOOK -> "OFFHOOK"
             else -> "UNKNOWN($state)"
         }
-        // Use isRingerPlaying as the authoritative check (more reliable than ringerWasTriggered)
         val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
         Log.i(TAG, "📞 Call state: $stateName | ringerActive=$ringerActive")
         
-        // When call ends (IDLE) and ringer is active, stop it
-        if (state == TelephonyManager.CALL_STATE_IDLE && ringerActive) {
-            Log.i(TAG, "📵 Call ended (IDLE) - auto-stopping ringer")
-            AppLog.log("📵 Call ended - auto-stopping ringer", applicationContext)
+        // Stop alarm when:
+        // - OFFHOOK = user picked up the call
+        // - IDLE = call ended / rejected
+        if ((state == TelephonyManager.CALL_STATE_OFFHOOK || state == TelephonyManager.CALL_STATE_IDLE)
+            && ringerActive) {
+            Log.i(TAG, "📵 Call $stateName - auto-stopping ringer")
+            AppLog.log("📵 Call $stateName - stopping alarm", applicationContext)
             
             ringerWasTriggered = false
             RingerManager.stopCurrentRinger()
-            
-            // Restore ringer mode to NORMAL after stopping
-            try {
-                val am = getSystemService(AUDIO_SERVICE) as? android.media.AudioManager
-                am?.ringerMode = android.media.AudioManager.RINGER_MODE_NORMAL
-                AppLog.log("🔔 Ringer mode restored to NORMAL", applicationContext)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error restoring ringer mode: ${e.message}")
-            }
+            // manualStopTime is set inside stopCurrentRinger() — blocks missed-call re-trigger
         }
     }
+    
+    /**
+     * Fallback for MIUI/Redmi: stop alarm when the call notification is removed.
+     * On many Redmi phones READ_PHONE_STATE requires a runtime grant the user may skip,
+     * so onNotificationRemoved is the most reliable call-end signal.
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        if (sbn == null) return
+        val pkg = sbn.packageName ?: return
+        
+        // Only care about monitored packages (phone/dialer/WhatsApp)
+        if (pkg !in MONITORED_PACKAGES) return
+        
+        // Only stop if the ringer is actually playing
+        val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
+        if (!ringerActive) return
+        
+        Log.i(TAG, "📵 Call notification removed ($pkg) - stopping alarm")
+        AppLog.log("📵 Notification removed ($pkg) - stopping alarm", applicationContext)
+        
+        ringerWasTriggered = false
+        RingerManager.stopCurrentRinger()
+    }
+
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
@@ -267,6 +285,15 @@ class NotificationService : NotificationListenerService() {
         if (lastTriggeredCaller == callerText && (currentTime - lastTriggerTime) < 60_000) {
             Log.i(TAG, "⏭️ Skipping - same caller triggered recently (prevents restart)")
             AppLog.log("⏭️ Skip - already triggered for this call", applicationContext)
+            return
+        }
+        
+        // Block re-trigger if user manually stopped alarm within last 90 seconds
+        // This prevents "missed call" / "call ended" notifications from double-ringing
+        val timeSinceManualStop = currentTime - EmergencyContactRepository.manualStopTime
+        if (EmergencyContactRepository.manualStopTime > 0 && timeSinceManualStop < 90_000) {
+            Log.i(TAG, "⏭️ Skipping - alarm was stopped ${timeSinceManualStop / 1000}s ago")
+            AppLog.log("⏭️ Blocked - user stopped alarm ${timeSinceManualStop / 1000}s ago", applicationContext)
             return
         }
 
