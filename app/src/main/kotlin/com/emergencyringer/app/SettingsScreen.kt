@@ -786,7 +786,7 @@ fun SettingsScreen(
                 // ────────────────────────────────────────────────
                 // RECENT TRIGGERS
                 // ────────────────────────────────────────────────
-                var triggerHistory by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory()) }
+                var triggerHistory by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory(context)) }
 
                 SettingsSectionCard(title = "Recent Triggers", vibrantPurple = vibrantPurple) {
                     if (triggerHistory.isEmpty()) {
@@ -851,7 +851,7 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                         androidx.compose.material3.OutlinedButton(
                             onClick = {
-                                EmergencyContactRepository.clearTriggerHistory()
+                                EmergencyContactRepository.clearTriggerHistory(context)
                                 triggerHistory = emptyList()
                             },
                             modifier = Modifier.fillMaxWidth(),

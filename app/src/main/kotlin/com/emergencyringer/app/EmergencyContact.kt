@@ -47,9 +47,6 @@ object EmergencyContactRepository {
     /** In-memory call timestamps per caller key (resets on service restart). */
     private val recentCallTimestamps: MutableMap<String, MutableList<Long>> = mutableMapOf()
 
-    /** Trigger history shown in Recent Triggers UI (max 50 entries). */
-    private val triggerHistory: MutableList<CallRecord> = mutableListOf()
-
     /**
      * Record an incoming call from [callerKey].
      * Prunes calls older than 1 hour, then returns current count within window.
@@ -57,7 +54,6 @@ object EmergencyContactRepository {
     fun recordIncomingCall(callerKey: String): Int {
         val now = System.currentTimeMillis()
         val timestamps = recentCallTimestamps.getOrPut(callerKey) { mutableListOf() }
-        // Remove entries older than 1 hour
         timestamps.removeAll { now - it > REPEATED_CALL_WINDOW_MS }
         timestamps.add(now)
         return timestamps.size
@@ -70,28 +66,65 @@ object EmergencyContactRepository {
             ?.count { now - it <= REPEATED_CALL_WINDOW_MS } ?: 0
     }
 
+    /** Trigger history shown in Recent Triggers UI (max 50 entries, persisted). */
+    private val triggerHistory: MutableList<CallRecord> = mutableListOf()
+    private var historyLoaded = false
+    private const val KEY_TRIGGER_HISTORY = "trigger_history"
+
+    /** Serialize a CallRecord to a storable string. */
+    private fun CallRecord.serialize() = "$callerName\t$reason\t$timestampMs"
+
+    /** Deserialize a CallRecord from a stored string. */
+    private fun deserializeRecord(s: String): CallRecord? {
+        val parts = s.split("\t")
+        if (parts.size < 3) return null
+        return CallRecord(parts[0], parts[1], parts[2].toLongOrNull() ?: return null)
+    }
+
+    /** Load history from SharedPreferences into memory (once per session). */
+    private fun ensureHistoryLoaded(context: Context) {
+        if (historyLoaded) return
+        historyLoaded = true
+        val stored = getPrefs(context).getStringSet(KEY_TRIGGER_HISTORY, null) ?: return
+        val loaded = stored.mapNotNull { deserializeRecord(it) }
+            .sortedByDescending { it.timestampMs }
+        triggerHistory.addAll(loaded)
+    }
+
+    /** Save current in-memory history to SharedPreferences. */
+    private fun saveHistory(context: Context) {
+        val set = triggerHistory.map { it.serialize() }.toSet()
+        getPrefs(context).edit().putStringSet(KEY_TRIGGER_HISTORY, set).apply()
+    }
+
     /** Add a trigger event to the history (shown in Recent Triggers screen). */
-    fun addTriggerRecord(callerName: String, reason: String) {
+    fun addTriggerRecord(callerName: String, reason: String, context: android.content.Context? = null) {
         synchronized(triggerHistory) {
+            context?.let { ensureHistoryLoaded(it) }
             triggerHistory.add(0, CallRecord(callerName, reason))
             if (triggerHistory.size > 50) triggerHistory.removeLastOrNull()
+            context?.let { saveHistory(it) }
         }
     }
 
     /** Returns a snapshot of the trigger history list. */
-    fun getTriggerHistory(): List<CallRecord> = synchronized(triggerHistory) {
-        triggerHistory.toList()
-    }
+    fun getTriggerHistory(context: android.content.Context? = null): List<CallRecord> =
+        synchronized(triggerHistory) {
+            context?.let { ensureHistoryLoaded(it) }
+            triggerHistory.toList()
+        }
 
     /** Clears the trigger history. */
-    fun clearTriggerHistory() = synchronized(triggerHistory) {
+    fun clearTriggerHistory(context: android.content.Context? = null) = synchronized(triggerHistory) {
         triggerHistory.clear()
+        context?.let { getPrefs(it).edit().remove(KEY_TRIGGER_HISTORY).apply() }
     }
 
     /** Resets the call count for [callerKey] after they triggered the repeated-caller alarm. */
     fun resetCallCount(callerKey: String) {
         recentCallTimestamps.remove(callerKey)
     }
+
 
     private var prefs: SharedPreferences? = null
 

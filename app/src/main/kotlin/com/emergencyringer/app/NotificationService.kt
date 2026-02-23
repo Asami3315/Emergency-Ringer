@@ -80,6 +80,11 @@ class NotificationService : NotificationListenerService() {
         // Track if we triggered the ringer (so we know to auto-stop)
         @Volatile
         var ringerWasTriggered = false
+
+        // true = phone went through RINGING (incoming call)
+        // false = phone went directly to OFFHOOK (outgoing call — do NOT trigger alarm)
+        @Volatile
+        var isCallIncoming: Boolean = false
     }
     
     // Phone state listener for call end detection
@@ -181,29 +186,49 @@ class NotificationService : NotificationListenerService() {
     
     /**
      * Called when phone call state changes (IDLE, RINGING, OFFHOOK).
-     * Auto-stops the ringer when the call ends (state becomes IDLE).
+     * Tracks incoming vs outgoing calls and auto-stops alarm on call end.
      */
     private fun handleCallStateChange(state: Int) {
         val stateName = when (state) {
-            TelephonyManager.CALL_STATE_IDLE -> "IDLE"
+            TelephonyManager.CALL_STATE_IDLE    -> "IDLE"
             TelephonyManager.CALL_STATE_RINGING -> "RINGING"
             TelephonyManager.CALL_STATE_OFFHOOK -> "OFFHOOK"
             else -> "UNKNOWN($state)"
         }
         val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
-        Log.i(TAG, "📞 Call state: $stateName | ringerActive=$ringerActive")
-        
-        // Stop alarm when:
-        // - OFFHOOK = user picked up the call
-        // - IDLE = call ended / rejected
-        if ((state == TelephonyManager.CALL_STATE_OFFHOOK || state == TelephonyManager.CALL_STATE_IDLE)
-            && ringerActive) {
-            Log.i(TAG, "📵 Call $stateName - auto-stopping ringer")
-            AppLog.log("📵 Call $stateName - stopping alarm", applicationContext)
-            
-            ringerWasTriggered = false
-            RingerManager.stopCurrentRinger()
-            // manualStopTime is set inside stopCurrentRinger() — blocks missed-call re-trigger
+        Log.i(TAG, "📞 Call state: $stateName | ringerActive=$ringerActive | incoming=$isCallIncoming")
+
+        when (state) {
+            TelephonyManager.CALL_STATE_RINGING -> {
+                // Phone is ringing = this is an INCOMING call
+                isCallIncoming = true
+                Log.i(TAG, "📲 Incoming call detected")
+            }
+            TelephonyManager.CALL_STATE_OFFHOOK -> {
+                // If we never went through RINGING, user is MAKING a call (outgoing)
+                if (!isCallIncoming) {
+                    Log.i(TAG, "📤 Outgoing call — alarm will be suppressed")
+                    AppLog.log("📤 Outgoing call — alarm suppressed", applicationContext)
+                }
+                // Stop alarm if it's ringing (user answered incoming call)
+                if (ringerActive && isCallIncoming) {
+                    Log.i(TAG, "✅ Call answered — stopping alarm")
+                    AppLog.log("✅ Call answered — stopping alarm", applicationContext)
+                    ringerWasTriggered = false
+                    RingerManager.stopCurrentRinger()
+                }
+            }
+            TelephonyManager.CALL_STATE_IDLE -> {
+                // Call ended — stop alarm if it's still ringing
+                if (ringerActive) {
+                    Log.i(TAG, "📵 Call IDLE — stopping alarm")
+                    AppLog.log("📵 Call ended — stopping alarm", applicationContext)
+                    ringerWasTriggered = false
+                    RingerManager.stopCurrentRinger()
+                }
+                // Reset incoming flag ready for next call
+                isCallIncoming = false
+            }
         }
     }
 
@@ -276,6 +301,15 @@ class NotificationService : NotificationListenerService() {
             return
         }
 
+        // Block outgoing calls — CATEGORY_CALL is set on outgoing notifications too.
+        // isCallIncoming is true ONLY if phone went through RINGING state first.
+        // If user is making a call, isCallIncoming = false → suppress alarm.
+        if (!isCallIncoming) {
+            Log.i(TAG, "📤 Outgoing call notification — skipping alarm trigger")
+            AppLog.log("📤 Outgoing call \u2014 alarm skipped", applicationContext)
+            return
+        }
+
         // Check if monitoring is enabled
         if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
             Log.i(TAG, "⏸️ Monitoring disabled by user - skipping emergency ringer")
@@ -310,7 +344,7 @@ class NotificationService : NotificationListenerService() {
             lastTriggerTime = currentTime
             lastTriggerSbnKey = sbn.key  // store so onNotificationRemoved knows which to stop on
             ringerWasTriggered = true
-            EmergencyContactRepository.addTriggerRecord(callerName, "Emergency Contact")
+            EmergencyContactRepository.addTriggerRecord(callerName, "Emergency Contact", applicationContext)
             RingerManager.triggerEmergencyRinger(applicationContext)
             return
         }
@@ -328,7 +362,7 @@ class NotificationService : NotificationListenerService() {
             lastTriggerTime = currentTime
             lastTriggerSbnKey = sbn.key
             ringerWasTriggered = true
-            EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)")
+            EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)", applicationContext)
             // Reset count so they need 3 more calls to trigger again
             EmergencyContactRepository.resetCallCount(callerKey)
             RingerManager.triggerEmergencyRinger(applicationContext)
@@ -404,7 +438,7 @@ class NotificationService : NotificationListenerService() {
 
         Log.i(TAG, "� MESSAGE ALERT: emergency contact '$title' sent a message")
         AppLog.log("� Message alert: $title", applicationContext)
-        EmergencyContactRepository.addTriggerRecord(title, "Message from contact")
+        EmergencyContactRepository.addTriggerRecord(title, "Message from contact", applicationContext)
         playMessageAlert()
     }
 
