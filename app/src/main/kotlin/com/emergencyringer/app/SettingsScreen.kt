@@ -270,9 +270,10 @@ fun SettingsScreen(
 
                 // ── Audio Output ──────────────────────────────
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                        // Section header
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -283,72 +284,201 @@ fun SettingsScreen(
                                 color = NeoMutedC,
                                 letterSpacing = 1.5.sp
                             )
-                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(24.dp))
                         }
 
-                        // Alarm Tone label
-                        Text("Alarm Tone", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 0.5.sp)
-
-                        // Phone Ringtone option
-                        val isPhone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ToneChip(
-                                label = "Phone Ringtone",
-                                icon = Icons.Default.PhoneAndroid,
-                                selected = isPhone,
-                                onClick = {
-                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
-                                }
-                            )
-                            ToneChip(
-                                label = "Custom Sound",
-                                icon = Icons.Default.MusicNote,
-                                selected = !isPhone,
-                                onClick = {
-                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
-                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
-                                }
-                            )
-                        }
-
-                        // Custom sound row
-                        if (!isPhone) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFFAFAFA), RoundedCornerShape(20.dp))
-                                    .border(1.dp, NeoPrimary.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                        // ── Volume display + bars ─────────────────
+                        Column {
+                            // 90% + MAX LOUD row
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Bottom
                             ) {
                                 Column {
-                                    Text("Selected", fontSize = 11.sp, color = NeoPrimary, fontWeight = FontWeight.Bold)
-                                    Text(ringtoneName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC)
+                                    Text(
+                                        "90%",
+                                        fontSize = 44.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = NeoTextC,
+                                        letterSpacing = (-2).sp
+                                    )
+                                    Text(
+                                        "Current Level",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = NeoMutedC
+                                    )
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        onClick = onSelectRingtone,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        border = BorderStroke(1.dp, NeoPrimary),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
-                                    ) {
-                                        Icon(Icons.Default.LibraryMusic, null, Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Change")
-                                    }
-                                    Button(
-                                        onClick = if (isPlaying) onStopRinger else onTestRinger,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (isPlaying) Color(0xFFC53030) else NeoPrimary
+                                Text(
+                                    "MAX LOUD",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeoPrimary,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier
+                                        .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
+                                        .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
+                                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.height(24.dp))
+
+                            // Volume bars
+                            val barHeights = listOf(0.40f, 0.60f, 0.75f, 0.90f, 1.00f)
+                            val activeIndex = 3 // 90% bar (4th)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(140.dp).padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                barHeights.forEachIndexed { index, fraction ->
+                                    val isActive = index == activeIndex
+                                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                        // The bar itself
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .fillMaxWidth()
+                                                .fillMaxHeight(fraction)
+                                                .background(
+                                                    if (isActive) NeoPrimary else Color(0xFFF3F4F6),
+                                                    RoundedCornerShape(50.dp)
+                                                )
                                         )
-                                    ) {
-                                        Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(if (isPlaying) "Stop" else "Preview", color = Color.White)
+                                        // VOL label on the active bar
+                                        if (isActive) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopCenter)
+                                                    .offset(y = (140 * (1f - fraction) - 40).dp)
+                                                    .background(NeoTextC, RoundedCornerShape(50.dp))
+                                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            ) {
+                                                Text("VOL", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            Text(
+                                "Tap bars to adjust override level",
+                                fontSize = 12.sp,
+                                color = NeoMutedC,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+
+                        // ── System Setup dropdown ─────────────────
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(NeoBg, RoundedCornerShape(24.dp))
+                                .border(1.dp, NeoBorderC, RoundedCornerShape(24.dp))
+                                .padding(18.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(NeoPrimary, CircleShape)
+                                )
+                                Text(
+                                    "SYSTEM SETUP",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeoMutedC,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White, RoundedCornerShape(18.dp))
+                                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("System Default", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Icon(Icons.Default.ExpandMore, contentDescription = null, tint = NeoMutedC, modifier = Modifier.size(22.dp))
+                            }
+                        }
+
+                        // ── Alarm Tone label + chips ──────────────
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Text("ALARM TONE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
+
+                            // Phone Ringtone option
+                            val isPhone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                ToneChip(
+                                    label = "Phone Ringtone",
+                                    icon = Icons.Default.PhoneAndroid,
+                                    selected = isPhone,
+                                    onClick = {
+                                        ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
+                                        EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
+                                    }
+                                )
+                                ToneChip(
+                                    label = "Custom Sound",
+                                    icon = Icons.Default.MusicNote,
+                                    selected = !isPhone,
+                                    onClick = {
+                                        ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
+                                        EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
+                                    }
+                                )
+                            }
+
+                            // Custom sound row
+                            if (!isPhone) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(NeoBg, RoundedCornerShape(20.dp))
+                                        .border(1.dp, NeoPrimary.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    Column {
+                                        Text("Selected", fontSize = 11.sp, color = NeoPrimary, fontWeight = FontWeight.Bold)
+                                        Text(ringtoneName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        OutlinedButton(
+                                            onClick = onSelectRingtone,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(14.dp),
+                                            border = BorderStroke(1.dp, NeoPrimary),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
+                                        ) {
+                                            Icon(Icons.Default.LibraryMusic, null, Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Change")
+                                        }
+                                        Button(
+                                            onClick = if (isPlaying) onStopRinger else onTestRinger,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isPlaying) Color(0xFFC53030) else NeoPrimary
+                                            )
+                                        ) {
+                                            Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(if (isPlaying) "Stop" else "Preview", color = Color.White)
+                                        }
                                     }
                                 }
                             }
