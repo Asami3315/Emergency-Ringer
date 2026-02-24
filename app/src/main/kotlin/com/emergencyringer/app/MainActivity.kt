@@ -19,6 +19,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,13 +54,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import android.app.NotificationManager
 
-// Material 3 Expressive Color Scheme - Purple & White
-private val VibrantPurple = Color(0xFF8B5CF6)
-private val DeepPurple = Color(0xFF6D28D9)
-private val LightBackground = Color(0xFFF8F7FF)
-private val SurfaceWhite = Color(0xFFFFFFFF)
-private val GlassFrost = Color(0x33000000)
-private val AccentPurple = Color(0xFFA78BFA)
+// Stitch Design System — Yellow/Gold palette
+private val VibrantPurple   = Color(0xFFFFB703)   // maps to NeoYellow for back-compat
+private val DeepPurple      = Color(0xFFE6A200)
+private val LightBackground = Color(0xFFFAFAFA)
+private val SurfaceWhite    = Color(0xFFFFFFFF)
+private val GlassFrost      = Color(0x33000000)
+private val AccentPurple    = Color(0xFFFFD569)
 
 class MainActivity : ComponentActivity() {
 
@@ -129,7 +130,11 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            var showSplash by remember { mutableStateOf(true) }
             EmergencyRingerTheme {
+                if (showSplash) {
+                    SplashScreen(onFinished = { showSplash = false })
+                } else {
                 MainScreen(
                     onRequestNotificationAccess = { openNotificationListenerSettings() },
                     onRequestDndAccess = { requestDndAccessIfNeeded() },
@@ -167,6 +172,7 @@ class MainActivity : ComponentActivity() {
                         ringtonePickerLauncher.launch(intent)
                     }
                 )
+                } // end else (showSplash = false)
             }
         }
     }
@@ -269,26 +275,27 @@ class MainActivity : ComponentActivity() {
 fun EmergencyRingerTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = lightColorScheme(
-            primary = VibrantPurple,
-            primaryContainer = DeepPurple,
-            secondary = AccentPurple,
-            background = LightBackground,
-            surface = SurfaceWhite,
-            onPrimary = Color.White,
-            onBackground = Color(0xFF1A1A1A),
-            onSurface = Color(0xFF1A1A1A)
+            primary            = Color(0xFFFFB703),
+            primaryContainer   = Color(0xFFE6A200),
+            secondary          = Color(0xFFFFD569),
+            background         = Color(0xFFFAFAFA),
+            surface            = Color(0xFFFFFFFF),
+            onPrimary          = Color.White,
+            onBackground       = Color(0xFF1A1A1A),
+            onSurface          = Color(0xFF1A1A1A)
         ),
         typography = Typography(
-            displayLarge = TextStyle(fontSize = 57.sp, fontWeight = FontWeight.Bold),
+            displayLarge  = TextStyle(fontSize = 57.sp, fontWeight = FontWeight.Bold),
             headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
-            titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-            bodyLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal),
-            labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            titleLarge    = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+            bodyLarge     = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal),
+            labelLarge    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
         ),
         content = content
     )
 }
 
+// ─── New 3-tab bottom-nav screen ──────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -308,194 +315,105 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     var contacts by remember { mutableStateOf(EmergencyContactRepository.getWhitelistSync(context)) }
-    var refreshTrigger by remember { mutableStateOf(0) }
-    var isRingerPlaying by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
+    var monitoringEnabled by remember { mutableStateOf(EmergencyContactRepository.isMonitoringEnabled(context)) }
+    var currentTab by remember { mutableStateOf(0) }   // 0=Home 1=History 2=Settings
 
+    // Re-read state on resume
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        refreshTrigger++
-        isRingerPlaying = EmergencyContactRepository.isRingerPlaying
-    }
-
-    LaunchedEffect(refreshTrigger) {
         contacts = EmergencyContactRepository.getWhitelistSync(context)
+        monitoringEnabled = EmergencyContactRepository.isMonitoringEnabled(context)
     }
-    
-    // Check ringer state periodically
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(500)
-            isRingerPlaying = EmergencyContactRepository.isRingerPlaying
+
+    // Also sync monitoring toggle in real-time from Quick Settings tile changes
+    DisposableEffect(Unit) {
+        val prefs = context.getSharedPreferences("emergency_contacts", Context.MODE_PRIVATE)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "monitoring_enabled") {
+                monitoringEnabled = EmergencyContactRepository.isMonitoringEnabled(context)
+            }
         }
-    }
-    // Show settings screen or main screen
-    if (showSettings) {
-        SettingsScreen(
-            onBack = { showSettings = false },
-            onSelectRingtone = onSelectRingtoneInSettings,
-            onTestRinger = {
-                RingerManager.triggerEmergencyRinger(context)
-            },
-            onStopRinger = {
-                RingerManager.stopCurrentRinger()
-            },
-            vibrantPurple = VibrantPurple,
-            deepPurple = DeepPurple
-        )
-        return
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    // Gradient background - White to Purple
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White,
-                        Color(0xFFF3F0FF),  // Very light purple
-                        Color(0xFFE9DFFF),  // Light purple
-                        Color(0xFFDDD0FF)   // Medium light purple
-                    ),
-                    startY = 0f,
-                    endY = Float.POSITIVE_INFINITY
-                )
+    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFAFAFA))) {
+        // ── Tab content ──────────────────────────────────────
+        when (currentTab) {
+            0 -> HomeScreen(
+                hasNotificationAccess     = hasNotificationAccess(),
+                hasDndAccess              = hasDndAccess(),
+                hasContactsPermission     = hasContactsPermission(),
+                isBatteryOptDisabled      = isBatteryOptimizationDisabled(),
+                contacts                  = contacts,
+                monitoringEnabled         = monitoringEnabled,
+                onMonitoringToggle        = { enabled ->
+                    monitoringEnabled = enabled
+                    EmergencyContactRepository.setMonitoringEnabled(context, enabled)
+                    AppLog.log(if (enabled) "✅ Monitoring enabled" else "⏸️ Monitoring paused", context)
+                },
+                onAddContact              = onAddContact,
+                onRequestNotification     = onRequestNotificationAccess,
+                onRequestDnd              = onRequestDndAccess,
+                onRequestBattery          = onRequestBatteryOptimization
             )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Header with Settings button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Animated heading with typing effect, fade-in, and slide
-                val fullTitle = "Emergency Ringer"
-                var displayedText by remember { mutableStateOf("") }
-                val slideOffset = remember { Animatable(30f) }
-                val titleAlpha = remember { Animatable(0f) }
-                
-                LaunchedEffect(Unit) {
-                    // Start fade-in, slide, and typing all concurrently
-                    kotlinx.coroutines.coroutineScope {
-                        launch {
-                            titleAlpha.animateTo(1f, animationSpec = tween(600, easing = EaseOutCubic))
-                        }
-                        launch {
-                            slideOffset.animateTo(0f, animationSpec = tween(600, easing = EaseOutCubic))
-                        }
-                        launch {
-                            kotlinx.coroutines.delay(100)
-                            for (i in 1..fullTitle.length) {
-                                displayedText = fullTitle.substring(0, i)
-                                kotlinx.coroutines.delay(45)
-                            }
-                        }
-                    }
-                }
-                
-                Text(
-                    displayedText,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.5).sp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF7C3AED),  // Deep violet (top-left of gear)
-                                Color(0xFFD946EF)   // Bright magenta (bottom-right of gear)
-                            )
-                        )
-                    ),
-                    modifier = Modifier
-                        .graphicsLayer {
-                            alpha = titleAlpha.value
-                            translationY = slideOffset.value
-                        }
-                )
-                IconButton(
-                    onClick = { showSettings = true },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_settings_gear),
-                        contentDescription = "Settings",
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // Service Status Card - Glassmorphism
-            ServiceStatusCard(
-                isActive = hasNotificationAccess() && hasDndAccess(),
-                serviceConnected = NotificationService.isServiceConnected
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            // Permissions Section - Temporarily always visible for testing
-            PermissionsSection(
+            1 -> HistoryScreen()
+            2 -> SettingsScreen(
+                onBack              = { currentTab = 0 },
+                onSelectRingtone    = onSelectRingtoneInSettings,
+                onTestRinger        = onTestRinger,
+                onStopRinger        = onStopRinger,
+                vibrantPurple       = Color(0xFFFFB703),
+                deepPurple          = Color(0xFFE6A200),
                 hasNotificationAccess = hasNotificationAccess(),
-                hasDndAccess = hasDndAccess(),
-                hasContactsPermission = hasContactsPermission(),
-                isBatteryOptDisabled = isBatteryOptimizationDisabled(),
+                hasDndAccess          = hasDndAccess(),
+                isBatteryOptDisabled  = isBatteryOptimizationDisabled(),
                 onRequestNotification = onRequestNotificationAccess,
-                onRequestDnd = onRequestDndAccess,
-                onRequestContacts = onRequestContactsPermission,
-                onRequestBattery = onRequestBatteryOptimization
+                onRequestDnd          = onRequestDndAccess,
+                onRequestBattery      = onRequestBatteryOptimization
             )
+        }
 
-
-
-
-            // Contacts Header
+        // ── Bottom Navigation ────────────────────────────────
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 28.dp)
+                .padding(horizontal = 48.dp)
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color(0xFF1A1A1A))
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(40.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Emergency Contacts",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF7C3AED),
-                                Color(0xFFD946EF)
-                            )
-                        )
-                    )
-                )
-                IconButton(
-                    onClick = onAddContact,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(VibrantPurple, CircleShape)
-                ) {
-                    Icon(Icons.Default.Add, "Add", tint = Color.White)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Contacts Grid - Bento Style
-            if (contacts.isEmpty()) {
-                EmptyContactsState(onAddContact)
-            } else {
-                BentoContactGrid(contacts, onRemoveContact) {
-                    contacts = EmergencyContactRepository.getWhitelistSync(context)
-                }
+                NavItem(icon = Icons.Default.GridView,   selected = currentTab == 0) { currentTab = 0 }
+                NavItem(icon = Icons.Default.History,    selected = currentTab == 1) { currentTab = 1 }
+                NavItem(icon = Icons.Default.Settings,   selected = currentTab == 2) { currentTab = 2 }
             }
         }
     }
 }
+
+@Composable
+private fun NavItem(icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (selected) Color(0xFFFFB703) else Color.White.copy(alpha = 0.5f),
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
 
 @Composable
 fun ServiceStatusCard(isActive: Boolean, serviceConnected: Boolean) {

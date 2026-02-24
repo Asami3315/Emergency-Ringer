@@ -55,18 +55,18 @@
 
         <activity
             android:name=".SplashActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EmergencyRinger.Splash" />
+
+        <activity
+            android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.EmergencyRinger.Splash">
+            android:theme="@style/Theme.EmergencyRinger">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.EmergencyRinger" />
 
         <service
             android:name=".NotificationService"

@@ -1,7 +1,9 @@
 package com.emergencyringer.app
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -13,19 +15,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.emergencyringer.app.BuildConfig
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val NeoBg      = Color(0xFFF4F1EA)   // warm cream matching Stitch
+private val SttCard    = Color(0xFFFFFFFF)
+private val NeoPrimary = Color(0xFFFFB703)
+private val NeoTextC   = Color(0xFF1A1A1A)
+private val NeoMutedC  = Color(0xFF8C8882)
+private val NeoBorderC = Color(0xFFF0EDE6)
+
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -33,860 +41,347 @@ fun SettingsScreen(
     onTestRinger: () -> Unit,
     onStopRinger: () -> Unit,
     vibrantPurple: Color,
-    deepPurple: Color
+    deepPurple: Color,
+    hasNotificationAccess: Boolean = false,
+    hasDndAccess: Boolean = false,
+    isBatteryOptDisabled: Boolean = false,
+    onRequestNotification: () -> Unit = {},
+    onRequestDnd: () -> Unit = {},
+    onRequestBattery: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    
-    // Settings state
     var autoStopDuration by remember { mutableStateOf(EmergencyContactRepository.getAutoStopDuration(context)) }
-    var vibrateEnabled by remember { mutableStateOf(EmergencyContactRepository.isVibrateEnabled(context)) }
-    var flashlightEnabled by remember { mutableStateOf(EmergencyContactRepository.isFlashlightEnabled(context)) }
-    var volumePercent by remember { mutableStateOf(EmergencyContactRepository.getVolumePercent(context).coerceAtLeast(10)) }
-    var alarmSoundType by remember { mutableStateOf(EmergencyContactRepository.getAlarmSoundType(context)) }
-    
-    // Track ringer playing state
-    var isRingerPlaying by remember { mutableStateOf(false) }
-    
+    var vibrateEnabled   by remember { mutableStateOf(EmergencyContactRepository.isVibrateEnabled(context)) }
+    var flashEnabled     by remember { mutableStateOf(EmergencyContactRepository.isFlashlightEnabled(context)) }
+    var msgEnabled       by remember { mutableStateOf(EmergencyContactRepository.isMessageAlertEnabled(context)) }
+    var ringtoneSource   by remember { mutableStateOf(EmergencyContactRepository.getRingtoneSource(context)) }
+    var isPlaying        by remember { mutableStateOf(false) }
+    var ringtoneRefresh  by remember { mutableStateOf(0) }
+
+    val ringtoneName = remember(ringtoneRefresh) {
+        val saved = EmergencyContactRepository.getRingtoneName(context)
+        if (!saved.isNullOrBlank()) saved else "Pick your favorite alarm sound"
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(300)
-            isRingerPlaying = EmergencyContactRepository.isRingerPlaying
+            isPlaying = EmergencyContactRepository.isRingerPlaying
         }
     }
-    
-    // Get ringtone name - reactive to changes
-    var ringtoneRefresh by remember { mutableStateOf(0) }
-    val ringtoneUri = remember(ringtoneRefresh) { EmergencyContactRepository.getRingtoneUri(context) }
-    
-    // Use the saved name directly (set at selection time) - avoids URI resolution failures after restart
-    val ringtoneName = remember(ringtoneRefresh) {
-        val savedName = EmergencyContactRepository.getRingtoneName(context)
-        if (!savedName.isNullOrBlank()) {
-            savedName
-        } else if (ringtoneUri != null) {
-            // Fallback: try to resolve from URI (may fail after restart for some URIs)
-            try {
-                val ringtone = android.media.RingtoneManager.getRingtone(context, android.net.Uri.parse(ringtoneUri))
-                val title = ringtone?.getTitle(context)
-                if (title != null && !title.all { it.isDigit() } && title.length > 1) title
-                else "Pick your favorite alarm sound"
-            } catch (e: Exception) {
-                "Pick your favorite alarm sound"
-            }
-        } else {
-            "Pick your favorite alarm sound"
-        }
-    }
-    
-    // Ringtone source - at top level so it refreshes on resume
-    var ringtoneSource by remember { mutableStateOf(EmergencyContactRepository.getRingtoneSource(context)) }
-    
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         ringtoneRefresh++
-        // Re-read ringtone source from prefs (may have changed via picker)
         ringtoneSource = EmergencyContactRepository.getRingtoneSource(context)
     }
 
-    // Gradient background
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White,
-                        Color(0xFFF3F0FF),
-                        Color(0xFFE9DFFF),
-                        Color(0xFFDDD0FF)
-                    )
-                )
+                Brush.verticalGradient(listOf(Color(0xFFFDFBF7), Color(0xFFF4F1EA)))
             )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            // ── Header ───────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 52.dp, bottom = 12.dp)
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = vibrantPurple)
-                }
                 Text(
-                    "SYSTEM CONTROL",
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF7C3AED),
-                                Color(0xFFD946EF)
-                            )
-                        )
-                    )
+                    "System Control",
+                    modifier = Modifier.align(Alignment.Center),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = NeoTextC,
+                    letterSpacing = (-0.3).sp
+                )
+                CircleIconButton(
+                    icon = Icons.Default.MoreHoriz,
+                    onClick = {},
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
-
+            // ── Scrollable content ────────────────────────────
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 120.dp),  // extra space for floating nav bar
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // ═══════════════════════════════════════
-                // SYSTEM STATUS & HEADER
-                // ═══════════════════════════════════════
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White,
-                    shadowElevation = 2.dp,
-                    border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Text(
-                                "NEXUS-TEC SYSTEM STATUS",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF1A1A1A)
-                            )
-                        }
-                        
-                        Text(
-                            "Active",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF4CAF50)
-                        )
-                        
-                        Text(
-                            "Emergency Ringer is a passive monitoring utility designed to override system-level silence for critical contacts. This software operates locally on your device to ensure zero-latency connection during emergencies.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF666666),
-                            lineHeight = 16.sp
-                        )
-                    }
-                }
-                // ═══════════════════════════════════════
-                // MESSAGE ALERTS
-                // ═══════════════════════════════════════
-                SettingsSectionCard(title = "Message Alerts", vibrantPurple = vibrantPurple) {
-                    var messageAlertEnabled by remember {
-                        mutableStateOf(EmergencyContactRepository.isMessageAlertEnabled(context))
-                    }
+
+                // ── Permissions card (moved from Home tab) ─────
+                SttPermissionsCard(
+                    hasNotificationAccess = hasNotificationAccess,
+                    hasDndAccess          = hasDndAccess,
+                    isBatteryOptDisabled  = isBatteryOptDisabled,
+                    onRequestNotification = onRequestNotification,
+                    onRequestDnd          = onRequestDnd,
+                    onRequestBattery      = onRequestBattery
+                )
+
+                // ── Shield Status Card (gradient border) ──────
+                ShieldStatusCard()
+
+                // ── Message Alerts ────────────────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "Emergency Contact Messages",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = Color.White
-                            )
-                            Text(
-                                "Play notification sound when an emergency contact messages you on WhatsApp, SMS, Telegram, etc.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF),
-                                lineHeight = 15.sp,
-                                modifier = Modifier.padding(top = 2.dp, end = 12.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .background(Color(0xFFFFF3E0), RoundedCornerShape(20.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Chat, contentDescription = null, tint = Color(0xFFE67E22), modifier = Modifier.size(24.dp))
+                            }
+                            Column {
+                                Text("Message Alerts", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Text("SMS & chat override", fontSize = 12.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
+                            }
                         }
                         Switch(
-                            checked = messageAlertEnabled,
+                            checked = msgEnabled,
                             onCheckedChange = {
-                                messageAlertEnabled = it
+                                msgEnabled = it
                                 EmergencyContactRepository.setMessageAlertEnabled(context, it)
                             },
                             colors = SwitchDefaults.colors(
+                                checkedTrackColor = NeoPrimary,
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = vibrantPurple,
-                                uncheckedThumbColor = Color(0xFF9CA3AF),
-                                uncheckedTrackColor = Color(0xFF374151)
+                                uncheckedTrackColor = Color(0xFFE0E0E0)
                             )
                         )
                     }
-                    if (messageAlertEnabled) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF7C3AED).copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Info, null, tint = vibrantPurple, modifier = Modifier.size(16.dp))
-                            Text(
-                                "Plays phone's default notification sound when any emergency contact sends you a message.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF9CA3AF),
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
                 }
 
-                // ═══════════════════════════════════════
-                // ALARM BEHAVIOR
-                // ═══════════════════════════════════════
-                SettingsSectionCard(title = "Alarm Behavior", vibrantPurple = vibrantPurple) {
-                    // Auto-stop timer with icon
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_clock),
-                            contentDescription = null,
-                            tint = vibrantPurple,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Auto-Stop Timer",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = Color(0xFF1A1A1A)
-                            )
-                            Text(
-                                "Prevent the phone from ringing forever if you don't answer.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
-                            )
-                        }
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            "30s" to 30_000L,
-                            "1 min" to 60_000L,
-                            "5 min" to 300_000L
-                        ).forEach { (label, duration) ->
-                            FilterChip(
-                                selected = autoStopDuration == duration,
-                                onClick = {
-                                    autoStopDuration = duration
-                                    EmergencyContactRepository.setAutoStopDuration(context, duration)
-                                },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = vibrantPurple,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Vibrate toggle
-                    SettingToggleRow(
-                        title = "Vibrate on Ring",
-                        description = "Vibrate phone when alarm rings",
-                        checked = vibrateEnabled,
-                        onCheckedChange = {
-                            vibrateEnabled = it
-                            EmergencyContactRepository.setVibrateEnabled(context, it)
-                        },
-                        vibrantPurple = vibrantPurple
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // Flashlight toggle
-                    SettingToggleRow(
-                        title = "Flashlight Strobe",
-                        description = "Blink the camera light to get your attention in the dark.",
-                        checked = flashlightEnabled,
-                        onCheckedChange = {
-                            flashlightEnabled = it
-                            EmergencyContactRepository.setFlashlightEnabled(context, it)
-                        },
-                        vibrantPurple = vibrantPurple
-                    )
-                }
-
-                // ═══════════════════════════════════════
-                // AUDIO CUSTOMIZATION
-                // ═══════════════════════════════════════
-                SettingsSectionCard(title = "Audio Customization", vibrantPurple = vibrantPurple) {
-                    
-                    // Ringtone Source Toggle (reads from top-level state, refreshed on resume)
-                    val isPhoneRingtone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                    
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Header
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(40.dp),
-                                shape = CircleShape,
-                                color = vibrantPurple.copy(alpha = 0.1f)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        if (isPhoneRingtone) Icons.Default.PhoneAndroid else Icons.Default.MusicNote,
-                                        contentDescription = null,
-                                        tint = vibrantPurple,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            Column {
-                                Text(
-                                    "Ringtone Source",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = Color(0xFF1A1A1A)
-                                )
-                                Text(
-                                    if (isPhoneRingtone) "Using system default ringtone" else "Using custom selected sound",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF666666)
-                                )
-                            }
-                        }
-
-                        // Premium Selection Cards
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Phone Option
-                            Surface(
-                                onClick = {
-                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isPhoneRingtone) vibrantPurple.copy(alpha = 0.1f) else Color(0xFFFAFAFA),
-                                border = BorderStroke(
-                                    if (isPhoneRingtone) 1.5.dp else 1.dp,
-                                    if (isPhoneRingtone) vibrantPurple else Color(0xFFEEEEEE)
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.PhoneAndroid,
-                                        contentDescription = null,
-                                        tint = if (isPhoneRingtone) vibrantPurple else Color.Gray,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Text(
-                                        "Phone Ringtone",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (isPhoneRingtone) vibrantPurple else Color.Gray,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
-                            }
-
-                            // Custom Option
-                            Surface(
-                                onClick = {
-                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
-                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (!isPhoneRingtone) vibrantPurple.copy(alpha = 0.1f) else Color(0xFFFAFAFA),
-                                border = BorderStroke(
-                                    if (!isPhoneRingtone) 1.5.dp else 1.dp,
-                                    if (!isPhoneRingtone) vibrantPurple else Color(0xFFEEEEEE)
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.MusicNote,
-                                        contentDescription = null,
-                                        tint = if (!isPhoneRingtone) vibrantPurple else Color.Gray,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Text(
-                                        "Custom Sound",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (!isPhoneRingtone) vibrantPurple else Color.Gray,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-
-                        // Custom Controls (Change / Preview) - Shown in a row below
-                        if (!isPhoneRingtone) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFF8F5FF),
-                                border = BorderStroke(1.dp, vibrantPurple.copy(alpha = 0.3f))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        "Selected Sound",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = vibrantPurple
-                                    )
-                                    Text(
-                                        ringtoneName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.Black
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
-                                            onClick = onSelectRingtone,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = BorderStroke(1.dp, vibrantPurple),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = vibrantPurple)
-                                        ) {
-                                            Icon(Icons.Default.LibraryMusic, null, Modifier.size(16.dp))
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Change")
-                                        }
-                                        Button(
-                                            onClick = if (isRingerPlaying) onStopRinger else onTestRinger,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isRingerPlaying) Color.Red else vibrantPurple
-                                            )
-                                        ) {
-                                            Icon(if (isRingerPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(16.dp))
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(if (isRingerPlaying) "Stop" else "Preview")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-                    Spacer(Modifier.height(20.dp))
-                    
-                    // 2. Modern Volume Control with Visual Indicators
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Animated volume icon based on level
-                            Surface(
-                                modifier = Modifier.size(40.dp),
-                                shape = CircleShape,
-                                color = vibrantPurple.copy(alpha = 0.1f)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        when {
-                                            volumePercent >= 70 -> Icons.Default.VolumeUp
-                                            volumePercent >= 30 -> Icons.Default.VolumeDown
-                                            else -> Icons.Default.VolumeMute
-                                        },
-                                        contentDescription = null,
-                                        tint = vibrantPurple,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        "Alarm Volume",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = Color(0xFF1A1A1A)
-                                    )
-                                    
-                                    // Modern percentage badge with gradient
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = vibrantPurple
-                                    ) {
-                                        Text(
-                                            "$volumePercent%",
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        // Enhanced Slider with visual markers
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 52.dp, end = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Low volume icon
-                            Icon(
-                                Icons.Default.VolumeMute,
-                                contentDescription = "Low",
-                                tint = if (volumePercent <= 30) vibrantPurple else Color(0xFFCCCCCC),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            
-                            // Modern slider with custom track
-                            Slider(
-                                value = volumePercent.toFloat(),
-                                onValueChange = { 
-                                    volumePercent = it.toInt().coerceAtLeast(10)
-                                },
-                                onValueChangeFinished = {
-                                    EmergencyContactRepository.setVolumePercent(context, volumePercent)
-                                },
-                                valueRange = 10f..100f,
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color.White,
-                                    activeTrackColor = vibrantPurple,
-                                    inactiveTrackColor = vibrantPurple.copy(alpha = 0.15f)
-                                )
-                            )
-                            
-                            // High volume icon
-                            Icon(
-                                Icons.Default.VolumeUp,
-                                contentDescription = "High",
-                                tint = if (volumePercent >= 70) vibrantPurple else Color(0xFFCCCCCC),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        
-                        // Volume level indicator text
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 70.dp, end = 32.dp, top = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                "10%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF999999),
-                                fontSize = 10.sp
-                            )
-                            Text(
-                                when {
-                                    volumePercent >= 80 -> "Very Loud"
-                                    volumePercent >= 60 -> "Loud"
-                                    volumePercent >= 40 -> "Medium"
-                                    volumePercent >= 20 -> "Low"
-                                    else -> "Quiet"
-                                },
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = vibrantPurple,
-                                fontSize = 11.sp
-                            )
-                            Text(
-                                "100%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF999999),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-                    Spacer(Modifier.height(16.dp))
-
-                    // 3. Alarm Sound Type with Icons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(40.dp),
-                            shape = CircleShape,
-                            color = vibrantPurple.copy(alpha = 0.1f)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Notifications,
-                                    contentDescription = null,
-                                    tint = vibrantPurple,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                        Column {
-                            Text(
-                                "Alarm Sound Type",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = Color(0xFF1A1A1A)
-                            )
-                            Text(
-                                "Choose the alarm tone style",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666)
-                            )
-                        }
-                    }
-                    
-                    Spacer(Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            "Ringtone" to EmergencyContactRepository.SOUND_TYPE_RINGTONE,
-                            "Siren" to EmergencyContactRepository.SOUND_TYPE_SIREN,
-                            "Beep" to EmergencyContactRepository.SOUND_TYPE_BEEP
-                        ).forEach { (label, type) ->
-                            FilterChip(
-                                selected = alarmSoundType == type,
-                                onClick = {
-                                    // Save the selection
-                                    alarmSoundType = type
-                                    EmergencyContactRepository.setAlarmSoundType(context, type)
-                                    
-                                    // Stop any currently playing sound first
-                                    RingerManager.stopCurrentRinger()
-                                    
-                                    // Preview the sound for 5 seconds
-                                    RingerManager.triggerEmergencyRinger(
-                                        context,
-                                        durationMs = 5000,
-                                        tempSoundType = type
-                                    )
-                                },
-                                label = { Text(label, fontWeight = FontWeight.Medium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = vibrantPurple,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = Color(0xFFF5F5F5)
-                                ),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-                // ═══════════════════════════════════════
-                // SUPPORT & LEGAL
-                // ═══════════════════════════════════════
-                SettingsSectionCard(title = "Support & Legal", vibrantPurple = vibrantPurple) {
-                    SettingsActionRow(
-                        title = "Initiate Support Ticket",
-                        subtitle = "Contact Engineering Team directly.",
-                        icon = Icons.Default.SupportAgent,
-                        vibrantPurple = vibrantPurple,
-                        onClick = {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
-                                data = android.net.Uri.parse("mailto:")
-                                putExtra(android.content.Intent.EXTRA_EMAIL, arrayOf("nexustec.official@gmail.com"))
-                                putExtra(android.content.Intent.EXTRA_SUBJECT, "[TICKET#3859] Emergency Ringer Support Request")
-                                putExtra(android.content.Intent.EXTRA_TEXT, """
-                                    Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}
-                                    Android Version: ${android.os.Build.VERSION.RELEASE}
-                                    App Version: ${BuildConfig.VERSION_NAME}
-                                    
-                                    --- WRITE YOUR ISSUE BELOW ---
-                                    
-                                """.trimIndent())
-                            }
-                            try {
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                // Handle case where no email app is available
-                            }
-                        }
-                    )
-                    
-                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-                    
-                    SettingsActionRow(
-                        title = "Privacy & Data Protocol",
-                        subtitle = "Review data handling and local-only storage policy.",
-                        icon = Icons.Default.Security,
-                        vibrantPurple = vibrantPurple,
-                        onClick = {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://doc-hosting.flycricket.io/emergency-ringer-privacy-policy/2f99335f-4632-4720-94cb-59aa38699479/privacy"))
-                            try { context.startActivity(intent) } catch (_: Exception) {}
-                        }
-                    )
-                    
-                    Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-
-                    SettingsActionRow(
-                        title = "Deploy to External User",
-                        subtitle = "Send download link to another device.",
-                        icon = Icons.Default.Share,
-                        vibrantPurple = vibrantPurple,
-                        onClick = {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, "Check out Emergency Ringer - Ensure you never miss critical calls from loved ones! Download here: https://play.google.com/store/apps/details?id=com.emergencyringer.app")
-                            }
-                            context.startActivity(android.content.Intent.createChooser(intent, "Share App"))
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // ────────────────────────────────────────────────
-                // RECENT TRIGGERS
-                // ────────────────────────────────────────────────
-                var triggerHistory by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory(context)) }
-
-                SettingsSectionCard(title = "Recent Triggers", vibrantPurple = vibrantPurple) {
-                    if (triggerHistory.isEmpty()) {
+                // ── Alarm Configuration ───────────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         Text(
-                            "No triggers yet. Alarm events will appear here.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF888888),
-                            modifier = Modifier.padding(vertical = 8.dp)
+                            "ALARM CONFIGURATION",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeoMutedC,
+                            letterSpacing = 1.5.sp
                         )
-                    } else {
-                        triggerHistory.forEach { record ->
-                            val isRepeated = record.reason.startsWith("Repeated")
-                            val badgeColor = if (isRepeated) Color(0xFFEF4444) else Color(0xFF7C3AED)
-                            val badgeLabel = if (isRepeated) "REPEATED" else "CONTACT"
+
+                        // Auto-stop
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Auto-stop", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFF8F8F8), RoundedCornerShape(20.dp))
+                                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                                ) {
+                                    Text("Silence timer", fontSize = 11.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            // Pill button row
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .background(Color(0xFFF5F5F5), RoundedCornerShape(22.dp))
+                                    .padding(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                // Coloured badge
-                                Box(
-                                    modifier = Modifier
-                                        .background(badgeColor.copy(alpha = 0.15f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        badgeLabel,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 9.sp
+                                listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L).forEach { (label, ms) ->
+                                    val selected = autoStopDuration == ms
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                autoStopDuration = ms
+                                                EmergencyContactRepository.setAutoStopDuration(context, ms)
+                                            },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (selected) SttCard else Color.Transparent
                                         ),
-                                        color = badgeColor
-                                    )
+                                        elevation = CardDefaults.cardElevation(
+                                            defaultElevation = if (selected) 2.dp else 0.dp
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                label,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (selected) NeoPrimary else NeoMutedC
+                                            )
+                                        }
+                                    }
                                 }
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        record.callerName.ifBlank { "Unknown" },
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        record.reason,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF9CA3AF)
-                                    )
-                                }
-                                Text(
-                                    record.timeLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF6B7280)
-                                )
-                            }
-                            if (record != triggerHistory.last()) {
-                                Divider(
-                                    color = Color.White.copy(alpha = 0.06f),
-                                    thickness = 0.5.dp
-                                )
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = {
-                                EmergencyContactRepository.clearTriggerHistory(context)
-                                triggerHistory = emptyList()
-                            },
+
+                        Divider(color = NeoBorderC, thickness = 1.dp)
+
+                        // Vibrate toggle
+                        NeoToggleRow(
+                            icon = Icons.Default.Vibration,
+                            label = "Haptic Pattern",
+                            checked = vibrateEnabled,
+                            onCheckedChange = {
+                                vibrateEnabled = it
+                                EmergencyContactRepository.setVibrateEnabled(context, it)
+                            }
+                        )
+
+                        // Flashlight toggle
+                        NeoToggleRow(
+                            icon = Icons.Default.FlashlightOn,
+                            label = "Strobe Light",
+                            checked = flashEnabled,
+                            onCheckedChange = {
+                                flashEnabled = it
+                                EmergencyContactRepository.setFlashlightEnabled(context, it)
+                            }
+                        )
+                    }
+                }
+
+                // ── Audio Output ──────────────────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Clear History", color = Color(0xFFEF4444), style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "AUDIO OUTPUT",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = NeoMutedC,
+                                letterSpacing = 1.5.sp
+                            )
+                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(22.dp))
+                        }
+
+                        // Alarm Tone label
+                        Text("Alarm Tone", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 0.5.sp)
+
+                        // Phone Ringtone option
+                        val isPhone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ToneChip(
+                                label = "Phone Ringtone",
+                                icon = Icons.Default.PhoneAndroid,
+                                selected = isPhone,
+                                onClick = {
+                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
+                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
+                                }
+                            )
+                            ToneChip(
+                                label = "Custom Sound",
+                                icon = Icons.Default.MusicNote,
+                                selected = !isPhone,
+                                onClick = {
+                                    ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
+                                    EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
+                                }
+                            )
+                        }
+
+                        // Custom sound row
+                        if (!isPhone) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFFAFAFA), RoundedCornerShape(20.dp))
+                                    .border(1.dp, NeoPrimary.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Column {
+                                    Text("Selected", fontSize = 11.sp, color = NeoPrimary, fontWeight = FontWeight.Bold)
+                                    Text(ringtoneName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC)
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(
+                                        onClick = onSelectRingtone,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = BorderStroke(1.dp, NeoPrimary),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
+                                    ) {
+                                        Icon(Icons.Default.LibraryMusic, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Change")
+                                    }
+                                    Button(
+                                        onClick = if (isPlaying) onStopRinger else onTestRinger,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isPlaying) Color(0xFFC53030) else NeoPrimary
+                                        )
+                                    ) {
+                                        Icon(if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(if (isPlaying) "Stop" else "Preview", color = Color.White)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                // ── Links (Support / Privacy / Share) ─────────
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = SttCard),
+                    elevation = CardDefaults.cardElevation(1.dp)
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        LinkRow(icon = Icons.Default.SupportAgent, label = "Support")
+                        Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                        LinkRow(icon = Icons.Default.Policy, label = "Privacy Policy")
+                        Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                        LinkRow(icon = Icons.Default.Share, label = "Share App")
+                    }
+                }
 
-                // Footer
+                // ── Version footer ────────────────────────────
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "ENGINEERED BY NEXUS-TEC",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = Color(0xFF999999)
+                        "Version ${BuildConfig.VERSION_NAME}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeoMutedC.copy(alpha = 0.5f)
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "Islamabad, PK Operations",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFAAAAAA)
-                    )
-                    Text(
-                        "v${BuildConfig.VERSION_NAME} (Stable Build)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFAAAAAA)
+                        "NEXUS-TEC SHIELD",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = NeoMutedC.copy(alpha = 0.3f),
+                        letterSpacing = 3.sp
                     )
                 }
             }
@@ -894,124 +389,283 @@ fun SettingsScreen(
     }
 }
 
+// ── Sub-components ────────────────────────────────────────────
+
 @Composable
-fun SettingsSectionCard(
-    title: String,
-    vibrantPurple: Color,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White,
-        shadowElevation = 2.dp
+private fun ShieldStatusCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, Brush.linearGradient(listOf(Color(0xFFFFE5A0), Color(0xFFE0F2FE), Color(0xFFFFE5A0))), RoundedCornerShape(32.dp))
+            .background(SttCard, RoundedCornerShape(32.dp))
+            .padding(28.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = vibrantPurple
-            )
-            content()
+        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(bottom = 14.dp)
+                ) {
+                    Box(modifier = Modifier.size(10.dp)) {
+                        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF34D399).copy(alpha = 0.4f), CircleShape))
+                        Box(modifier = Modifier.size(6.dp).align(Alignment.Center).background(Color(0xFF10B981), CircleShape))
+                    }
+                    Text("SYSTEM ACTIVE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF059669), letterSpacing = 1.sp)
+                }
+                Text("Emergency\nShield", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = NeoTextC, lineHeight = 32.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Whitelisted contacts bypass Do Not Disturb. Monitoring active.",
+                    fontSize = 13.sp,
+                    color = NeoMutedC,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 18.sp
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(22.dp))
+                    .border(1.dp, NeoPrimary.copy(alpha = 0.2f), RoundedCornerShape(22.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Shield, contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(36.dp))
+            }
         }
     }
 }
 
 @Composable
-fun SettingToggleRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    vibrantPurple: Color
+private fun NeoSettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = SttCard),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(modifier = Modifier.padding(24.dp), content = content)
+    }
+}
+
+@Composable
+private fun CircleIconButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(SttCard.copy(alpha = 0.7f))
+            .border(1.dp, NeoBorderC, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = NeoTextC, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun NeoToggleRow(icon: ImageVector, label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = Color(0xFF1A1A1A)
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF666666)
-            )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        if (checked) NeoPrimary.copy(alpha = 0.12f) else Color(0xFFF0EDE6),
+                        RoundedCornerShape(14.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = if (checked) NeoPrimary else NeoMutedC, modifier = Modifier.size(22.dp))
+            }
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
+                checkedTrackColor = NeoPrimary,
                 checkedThumbColor = Color.White,
-                checkedTrackColor = vibrantPurple,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Color(0xFFCCCCCC)
+                uncheckedTrackColor = Color(0xFFE0E0E0)
             )
         )
     }
 }
+
 @Composable
-fun SettingsActionRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    vibrantPurple: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        color = Color.Transparent
+private fun ToneChip(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(if (selected) NeoPrimary else Color.White)
+            .border(1.dp, if (selected) Color.Transparent else Color(0xFFE5E5E5), RoundedCornerShape(50.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = vibrantPurple.copy(alpha = 0.1f)
+        Icon(icon, contentDescription = null, tint = if (selected) Color.White else NeoMutedC, modifier = Modifier.size(18.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selected) Color.White else NeoMutedC)
+    }
+}
+
+@Composable
+private fun LinkRow(icon: ImageVector, label: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { }
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(Color(0xFFF8F8F8), RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = NeoMutedC, modifier = Modifier.size(22.dp))
+            }
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFCCCCCC), modifier = Modifier.size(22.dp))
+    }
+}
+
+// ── Permissions Card (moved from Home screen) ─────────────────
+@Composable
+private fun SttPermissionsCard(
+    hasNotificationAccess: Boolean,
+    hasDndAccess: Boolean,
+    isBatteryOptDisabled: Boolean,
+    onRequestNotification: () -> Unit,
+    onRequestDnd: () -> Unit,
+    onRequestBattery: () -> Unit
+) {
+    val readyCount = listOf(hasNotificationAccess, hasDndAccess, isBatteryOptDisabled).count { it }
+    var expanded by remember { mutableStateOf(readyCount < 3) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = SttCard),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Header row (always visible, tap to expand)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = null,
+                            tint = NeoPrimary, modifier = Modifier.size(24.dp))
+                    }
+                    Column {
+                        Text("System Control", fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp, color = NeoTextC)
+                        Text("Configuration & Permissions", fontSize = 12.sp,
+                            color = NeoMutedC, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (readyCount == 3) {
+                        Text("ALL READY", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            color = NeoPrimary,
+                            modifier = Modifier
+                                .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp))
+                    } else {
+                        Text("$readyCount/3", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            color = Color(0xFFC53030),
+                            modifier = Modifier
+                                .background(Color(0xFFFED7D7).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
                     Icon(
-                        icon,
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = null,
-                        tint = vibrantPurple,
-                        modifier = Modifier.size(20.dp)
+                        tint = if (expanded) NeoPrimary else NeoMutedC,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                    color = Color(0xFF1A1A1A)
-                )
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
+
+            // Expandable permissions list
+            if (expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF8F6F0), RoundedCornerShape(16.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            SttPermissionRow("Notification Access", hasNotificationAccess, onRequestNotification)
+                            SttPermissionRow("DND Access", hasDndAccess, onRequestDnd)
+                            SttPermissionRow("Battery Optimization", isBatteryOptDisabled, onRequestBattery)
+                        }
+                    }
+                }
             }
-            
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = Color(0xFFCCCCCC)
-            )
+        }
+    }
+}
+
+@Composable
+private fun SttPermissionRow(title: String, granted: Boolean, onRequest: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = NeoMutedC)
+        if (granted) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(Color(0xFF4CD964), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null,
+                    tint = Color.White, modifier = Modifier.size(14.dp))
+            }
+        } else {
+            TextButton(
+                onClick = onRequest,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = NeoPrimary)
+            ) {
+                Text("Enable", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
