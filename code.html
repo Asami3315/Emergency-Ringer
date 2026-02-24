@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>2026 Neo-Minimal Control V2</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "neo-bg": "#FFFDF8", // Ultra-clean cream
+                        "neo-card": "#FFFFFF",
+                        "neo-primary": "#FFB703", // Warm Sunny Yellow
+                        "neo-text": "#121212", 
+                        "neo-muted": "#949494",
+                        "neo-border": "#F2F0EA",
+                        "neo-glow": "rgba(255, 183, 3, 0.4)",
+                    },
+                    fontFamily: {
+                        "display": ["DM Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "neo": "32px", // Hyper-rounded 32px
+                        "pill": "9999px",
+                    },
+                    boxShadow: {
+                        'neo-soft': '0 8px 32px -8px rgba(200, 190, 170, 0.15)',
+                        'neo-inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
+                        'neo-glow': '0 0 16px var(--neo-glow)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'gradient-border': 'gradient 3s ease infinite',
+                    },
+                    keyframes: {
+                        gradient: {
+                            '0%, 100%': { 'background-position': '0% 50%' },
+                            '50%': { 'background-position': '100% 50%' },
+                        }
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        body::-webkit-scrollbar {
+            display: none;
+        }
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            width: 28px;
+            border-radius: 50%;
+            background: #FFB703;
+            cursor: pointer;
+            margin-top: -12px; 
+            box-shadow: 0 4px 12px rgba(255, 183, 3, 0.3);
+            border: 4px solid #fff;
+            transition: transform 0.1s ease;
+        }
+        input[type=range]:active::-webkit-slider-thumb {
+            transform: scale(0.9);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #F2F0EA;
+            border-radius: 999px;
+        }
+        .soft-press:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }.gradient-border-mask {
+            position: relative;
+            background: #fff;
+            background-clip: padding-box;
+            border: 2px solid transparent;
+            border-radius: 32px;
+        }
+        .gradient-border-mask::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            margin: -2px;
+            border-radius: inherit;
+            background: linear-gradient(to right, #FFE5A0, #E0F2FE, #FFE5A0);
+            background-size: 200% 200%;
+            animation: gradient-border 4s ease infinite;
+        }
+        @keyframes gradient-border {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-neo-bg font-display antialiased text-neo-text min-h-screen flex flex-col selection:bg-neo-primary selection:text-white">
+<header class="sticky top-0 z-50 bg-neo-bg/90 backdrop-blur-md px-6 py-6 flex items-center justify-between transition-all duration-300">
+<button class="soft-press bg-neo-card hover:bg-white transition-all w-14 h-14 rounded-full flex items-center justify-center shadow-neo-soft border border-neo-border">
+<span class="material-symbols-outlined text-neo-text text-2xl font-medium">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-wide text-neo-text uppercase opacity-80">System Control</h1>
+<button class="soft-press bg-neo-card hover:bg-white transition-all w-14 h-14 rounded-full flex items-center justify-center shadow-neo-soft border border-neo-border">
+<span class="material-symbols-outlined text-neo-text text-2xl">more_horiz</span>
+</button>
+</header>
+<main class="flex-1 overflow-y-auto px-6 pb-10 space-y-6">
+<section class="gradient-border-mask p-8 shadow-neo-soft relative overflow-hidden group">
+<div class="flex justify-between items-start z-10 relative">
+<div class="flex-1 pr-4">
+<div class="flex items-center gap-3 mb-4">
+<div class="relative flex items-center justify-center w-4 h-4">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+</div>
+<h2 class="text-xs font-bold uppercase tracking-widest text-emerald-600">System Active</h2>
+</div>
+<p class="text-3xl font-bold text-neo-text mb-3 tracking-tight">Nexus-Tec<br/>Shield</p>
+<p class="text-neo-muted text-sm leading-relaxed font-medium">Whitelisted contacts bypass Do Not Disturb. Monitoring active.</p>
+</div>
+<div class="w-20 h-20 rounded-[24px] bg-neo-primary/10 flex items-center justify-center text-neo-primary ring-1 ring-neo-primary/20 backdrop-blur-sm">
+<span class="material-symbols-outlined text-4xl">shield_lock</span>
+</div>
+</div>
+<div class="absolute bottom-0 right-0 w-48 h-48 opacity-5 pointer-events-none mix-blend-multiply transition-transform duration-1000 group-hover:scale-105" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuALQu97c4CqAzuUNLQCb68rNL6_bQ2tR4YgjWNwuh6ROkOCYLbEekB4Tqu6tiEDCSMINgwIGXY6xSTJAeG6nOywHluPtXrLn-PUyO2TaxcaLujnpNk0jTFiWnFS5SHlZPy2-2R_jHvWUEF8zjLIwlBCr4dsl6Ask4ms7_sjgqQ2YafGWHkTo1O8IrIAsTZDO-hOcWX_CfjZI8w4Cy9b5Zz7kl9ADFZ5J-2I4gRuynX2qCOjnRIv1gT4_Sb5GaNmR8R_09KgHLbQx2qp'); background-size: cover; border-radius: 4rem 0 0 0;"></div>
+</section>
+<section class="rounded-neo bg-neo-card p-6 shadow-neo-soft flex items-center justify-between border border-neo-border transition-transform active:scale-[0.99] duration-200">
+<div class="flex items-center gap-5">
+<div class="w-14 h-14 rounded-[20px] bg-orange-50 text-orange-400 flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-2xl">chat_bubble</span>
+</div>
+<div>
+<p class="text-lg font-bold text-neo-text">Message Alerts</p>
+<p class="text-xs text-neo-muted font-medium mt-1">SMS override enabled</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer soft-press">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-16 h-9 bg-gray-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-7 after:w-7 after:transition-all peer-checked:bg-neo-primary shadow-neo-inner duration-300"></div>
+</label>
+</section>
+<section class="rounded-neo bg-neo-card p-8 shadow-neo-soft space-y-8 border border-neo-border">
+<h3 class="text-xs font-bold text-neo-muted uppercase tracking-widest pl-1">Alarm Configuration</h3>
+<div class="space-y-5">
+<div class="flex justify-between items-baseline px-1">
+<label class="text-lg font-bold text-neo-text">Auto-stop</label>
+<span class="text-xs font-medium text-neo-muted bg-gray-50 px-3 py-1 rounded-full">Silence timer</span>
+</div>
+<div class="bg-gray-50 p-1.5 rounded-[24px] flex gap-2">
+<button class="flex-1 py-3 px-4 rounded-[20px] hover:bg-white/50 text-sm font-semibold text-neo-muted transition-all soft-press">30s</button>
+<button class="flex-1 py-3 px-4 rounded-[20px] bg-white text-neo-primary shadow-sm text-sm font-bold transition-all ring-1 ring-black/5 transform scale-[1.02]">1m</button>
+<button class="flex-1 py-3 px-4 rounded-[20px] hover:bg-white/50 text-sm font-semibold text-neo-muted transition-all soft-press">5m</button>
+</div>
+</div>
+<div class="h-px bg-gradient-to-r from-transparent via-neo-border to-transparent w-full"></div>
+<div class="space-y-6">
+<div class="flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-neo-muted group-hover:text-neo-text transition-colors">
+<span class="material-symbols-outlined text-[22px]">vibration</span>
+</div>
+<span class="text-base font-bold text-neo-text/80">Haptic Pattern</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer soft-press">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-14 h-8 bg-gray-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-neo-primary shadow-neo-inner"></div>
+</label>
+</div>
+<div class="flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-neo-muted group-hover:text-neo-text transition-colors">
+<span class="material-symbols-outlined text-[22px]">flashlight_on</span>
+</div>
+<span class="text-base font-bold text-neo-text/80">Strobe Light</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer soft-press">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-14 h-8 bg-gray-100 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-neo-primary shadow-neo-inner"></div>
+</label>
+</div>
+</div>
+</section>
+<section class="rounded-neo bg-neo-card p-8 shadow-neo-soft space-y-10 border border-neo-border">
+<div class="flex justify-between items-center px-1">
+<h3 class="text-xs font-bold text-neo-muted uppercase tracking-widest">Audio Output</h3>
+<span class="material-symbols-outlined text-neo-primary text-2xl animate-pulse-slow">volume_up</span>
+</div>
+<div class="relative">
+<div class="flex justify-between items-end mb-8">
+<div class="flex flex-col">
+<label class="text-5xl font-bold text-neo-text tracking-tighter">90%</label>
+<span class="text-xs font-semibold text-neo-muted mt-1">Current Level</span>
+</div>
+<span class="text-[10px] font-bold text-neo-primary bg-yellow-50 px-4 py-2 rounded-pill uppercase tracking-widest border border-yellow-100 shadow-sm">Max Loud</span>
+</div>
+<div class="h-36 flex items-end justify-between gap-4 px-1">
+<div class="w-full bg-gray-100 rounded-pill relative group cursor-pointer hover:bg-gray-200 transition-all h-[40%] soft-press"></div>
+<div class="w-full bg-gray-100 rounded-pill relative group cursor-pointer hover:bg-gray-200 transition-all h-[60%] soft-press"></div>
+<div class="w-full bg-gray-100 rounded-pill relative group cursor-pointer hover:bg-gray-200 transition-all h-[75%] soft-press"></div>
+<div class="w-full bg-neo-primary rounded-pill relative shadow-lg shadow-neo-primary/30 h-[90%] transition-all hover:scale-x-110">
+<div class="absolute -top-12 left-1/2 -translate-x-1/2 bg-neo-text text-white text-[10px] font-bold px-3 py-1.5 rounded-full mb-2 opacity-100 shadow-lg">VOL</div>
+</div>
+<div class="w-full bg-gray-100 rounded-pill relative group cursor-pointer hover:bg-gray-200 transition-all h-[100%] soft-press"></div>
+</div>
+<p class="text-center text-xs text-neo-muted mt-6 font-medium">Tap bars to adjust override level</p>
+</div>
+<div class="bg-neo-bg rounded-[24px] p-5 border border-neo-border group transition-all hover:shadow-md">
+<label class="flex items-center gap-2 text-xs font-bold text-neo-muted mb-3 uppercase tracking-wide pl-1">
+<span class="w-1.5 h-1.5 rounded-full bg-neo-primary shadow-[0_0_8px_var(--neo-glow)]"></span>
+                    System Setup
+                </label>
+<div class="relative">
+<select class="w-full appearance-none bg-white border-0 text-neo-text font-bold text-base rounded-[18px] py-4 pl-5 pr-12 focus:ring-2 focus:ring-neo-primary/20 shadow-sm transition-shadow">
+<option>System Default</option>
+<option>External Speaker</option>
+<option>Headphones Only</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-5 text-neo-muted">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold text-neo-muted mb-5 uppercase tracking-wide pl-1">Alarm Tone</label>
+<div class="flex flex-wrap gap-3">
+<button class="soft-press inline-flex items-center px-6 py-3.5 rounded-pill text-sm font-bold bg-neo-primary text-white shadow-lg shadow-neo-primary/25 cursor-pointer transition-transform border border-transparent">
+<span class="material-symbols-outlined text-lg mr-2">emergency</span> Siren
+                    </button>
+<button class="soft-press inline-flex items-center px-6 py-3.5 rounded-pill text-sm font-bold bg-white text-neo-muted border border-gray-100 shadow-sm cursor-pointer hover:bg-gray-50 hover:text-neo-text transition-all">
+<span class="material-symbols-outlined text-lg mr-2">graphic_eq</span> Pulse
+                    </button>
+<button class="soft-press inline-flex items-center px-6 py-3.5 rounded-pill text-sm font-bold bg-white text-neo-muted border border-gray-100 shadow-sm cursor-pointer hover:bg-gray-50 hover:text-neo-text transition-all">
+<span class="material-symbols-outlined text-lg mr-2">notifications</span> Classic
+                    </button>
+</div>
+</div>
+</section>
+<section class="rounded-neo bg-neo-card shadow-neo-soft overflow-hidden mb-8 border border-neo-border">
+<div class="divide-y divide-gray-50">
+<button class="w-full flex items-center justify-between p-6 hover:bg-neo-bg transition-colors group">
+<div class="flex items-center gap-5">
+<div class="bg-gray-50 p-3 rounded-2xl text-neo-muted group-hover:text-neo-primary group-hover:bg-yellow-50 transition-colors">
+<span class="material-symbols-outlined">support_agent</span>
+</div>
+<span class="text-base font-bold text-neo-text">Support</span>
+</div>
+<span class="material-symbols-outlined text-gray-300 text-xl group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-6 hover:bg-neo-bg transition-colors group">
+<div class="flex items-center gap-5">
+<div class="bg-gray-50 p-3 rounded-2xl text-neo-muted group-hover:text-neo-primary group-hover:bg-yellow-50 transition-colors">
+<span class="material-symbols-outlined">policy</span>
+</div>
+<span class="text-base font-bold text-neo-text">Privacy Policy</span>
+</div>
+<span class="material-symbols-outlined text-gray-300 text-xl group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-6 hover:bg-neo-bg transition-colors group">
+<div class="flex items-center gap-5">
+<div class="bg-gray-50 p-3 rounded-2xl text-neo-muted group-hover:text-neo-primary group-hover:bg-yellow-50 transition-colors">
+<span class="material-symbols-outlined">share</span>
+</div>
+<span class="text-base font-bold text-neo-text">Share App</span>
+</div>
+<span class="material-symbols-outlined text-gray-300 text-xl group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+</div>
+</section>
+<div class="text-center pb-10 pt-4">
+<p class="text-xs font-bold text-neo-muted opacity-50">Version 2.4.1 (Build 890)</p>
+<p class="text-[10px] font-black text-neo-muted mt-2 opacity-30 uppercase tracking-[0.2em]">Nexus-Tec Inc.</p>
+</div>
+</main>
+
+</body></html>

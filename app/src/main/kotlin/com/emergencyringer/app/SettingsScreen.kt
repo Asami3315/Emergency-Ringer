@@ -27,12 +27,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.emergencyringer.app.BuildConfig
 
-private val NeoBg      = Color(0xFFF4F1EA)   // warm cream matching Stitch
+private val NeoBg      = Color(0xFFFFFDF8)   // ultra-clean cream from HTML
 private val SttCard    = Color(0xFFFFFFFF)
 private val NeoPrimary = Color(0xFFFFB703)
-private val NeoTextC   = Color(0xFF1A1A1A)
-private val NeoMutedC  = Color(0xFF8C8882)
-private val NeoBorderC = Color(0xFFF0EDE6)
+private val NeoTextC   = Color(0xFF121212)
+private val NeoMutedC  = Color(0xFF949494)
+private val NeoBorderC = Color(0xFFF2F0EA)
 
 @Composable
 fun SettingsScreen(
@@ -84,25 +84,23 @@ fun SettingsScreen(
         Column(modifier = Modifier.fillMaxSize()) {
 
             // ── Header ───────────────────────────────────────
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(top = 52.dp, bottom = 12.dp)
+                    .padding(top = 52.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                CircleIconButton(icon = Icons.Default.ArrowBack, onClick = onBack)
                 Text(
-                    "System Control",
-                    modifier = Modifier.align(Alignment.Center),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = NeoTextC,
-                    letterSpacing = (-0.3).sp
+                    "SYSTEM CONTROL",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NeoTextC.copy(alpha = 0.8f),
+                    letterSpacing = 0.5.sp
                 )
-                CircleIconButton(
-                    icon = Icons.Default.MoreHoriz,
-                    onClick = {},
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                )
+                CircleIconButton(icon = Icons.Default.MoreHoriz, onClick = {})
             }
 
             // ── Scrollable content ────────────────────────────
@@ -146,7 +144,7 @@ fun SettingsScreen(
                             }
                             Column {
                                 Text("Message Alerts", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
-                                Text("SMS & chat override", fontSize = 12.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
+                                Text("SMS override enabled", fontSize = 12.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
                             }
                         }
                         Switch(
@@ -234,7 +232,17 @@ fun SettingsScreen(
                             }
                         }
 
-                        Divider(color = NeoBorderC, thickness = 1.dp)
+                        // Gradient divider from code.html
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color.Transparent, NeoBorderC, Color.Transparent)
+                                    )
+                                )
+                        )
 
                         // Vibrate toggle
                         NeoToggleRow(
@@ -444,7 +452,7 @@ private fun NeoSettingsCard(modifier: Modifier = Modifier, content: @Composable 
         colors = CardDefaults.cardColors(containerColor = SttCard),
         elevation = CardDefaults.cardElevation(1.dp)
     ) {
-        Column(modifier = Modifier.padding(24.dp), content = content)
+        Column(modifier = Modifier.padding(28.dp), content = content)
     }
 }
 
@@ -478,15 +486,12 @@ private fun NeoToggleRow(icon: ImageVector, label: String, checked: Boolean, onC
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(
-                        if (checked) NeoPrimary.copy(alpha = 0.12f) else Color(0xFFF0EDE6),
-                        RoundedCornerShape(14.dp)
-                    ),
+                    .background(Color(0xFFF9FAFB), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = if (checked) NeoPrimary else NeoMutedC, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = null, tint = NeoMutedC, modifier = Modifier.size(22.dp))
             }
-            Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC)
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC.copy(alpha = 0.8f))
         }
         Switch(
             checked = checked,
