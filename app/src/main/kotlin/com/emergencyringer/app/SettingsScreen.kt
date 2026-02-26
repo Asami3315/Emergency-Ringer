@@ -506,7 +506,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(8.dp)) {
                         LinkRow(icon = Icons.Default.SupportAgent, label = "Support") {
                             val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
-                                data = android.net.Uri.parse("mailto:support@emergencyringer.com")
+                                data = android.net.Uri.parse("mailto:nexustec.official@gmail.com")
                                 putExtra(android.content.Intent.EXTRA_SUBJECT, "Emergency Ringer Support")
                             }
                             try { context.startActivity(intent) } catch (_: Exception) {}
