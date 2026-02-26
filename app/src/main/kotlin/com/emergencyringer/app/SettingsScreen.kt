@@ -113,16 +113,6 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
 
-                // ── Permissions card (moved from Home tab) ─────
-                SttPermissionsCard(
-                    hasNotificationAccess = hasNotificationAccess,
-                    hasDndAccess          = hasDndAccess,
-                    isBatteryOptDisabled  = isBatteryOptDisabled,
-                    onRequestNotification = onRequestNotification,
-                    onRequestDnd          = onRequestDnd,
-                    onRequestBattery      = onRequestBattery
-                )
-
                 // ── Shield Status Card (gradient border) ──────
                 ShieldStatusCard()
 
@@ -162,6 +152,16 @@ fun SettingsScreen(
                     }
                 }
 
+                // ── Permissions card (below Message Alerts) ─────
+                SttPermissionsCard(
+                    hasNotificationAccess = hasNotificationAccess,
+                    hasDndAccess          = hasDndAccess,
+                    isBatteryOptDisabled  = isBatteryOptDisabled,
+                    onRequestNotification = onRequestNotification,
+                    onRequestDnd          = onRequestDnd,
+                    onRequestBattery      = onRequestBattery
+                )
+
                 // ── Alarm Configuration ───────────────────────
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -199,34 +199,27 @@ fun SettingsScreen(
                             ) {
                                 listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L).forEach { (label, ms) ->
                                     val selected = autoStopDuration == ms
-                                    Card(
+                                    Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable {
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(if (selected) SttCard else Color.Transparent)
+                                            .clickable(
+                                                indication = null,
+                                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                            ) {
                                                 autoStopDuration = ms
                                                 EmergencyContactRepository.setAutoStopDuration(context, ms)
-                                            },
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (selected) SttCard else Color.Transparent
-                                        ),
-                                        elevation = CardDefaults.cardElevation(
-                                            defaultElevation = if (selected) 2.dp else 0.dp
-                                        )
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                label,
-                                                fontSize = 14.sp,
-                                                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                                color = if (selected) NeoPrimary else NeoMutedC
-                                            )
-                                        }
+                                        Text(
+                                            label,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            color = if (selected) NeoPrimary else NeoMutedC
+                                        )
                                     }
                                 }
                             }
@@ -288,8 +281,13 @@ fun SettingsScreen(
                         }
 
                         // ── Volume display + bars ─────────────────
+                        val volumeLevels = listOf(40, 60, 75, 90, 100)
+                        var selectedVolume by remember { mutableStateOf(EmergencyContactRepository.getVolumePercent(context)) }
+                        // Map stored volume to closest bar index
+                        val activeIndex = volumeLevels.indexOfFirst { it >= selectedVolume }.let { if (it == -1) 4 else it }
+
                         Column {
-                            // 90% + MAX LOUD row
+                            // Volume % + MAX LOUD row
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -297,7 +295,7 @@ fun SettingsScreen(
                             ) {
                                 Column {
                                     Text(
-                                        "90%",
+                                        "${volumeLevels[activeIndex]}%",
                                         fontSize = 44.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = NeoTextC,
@@ -310,32 +308,44 @@ fun SettingsScreen(
                                         color = NeoMutedC
                                     )
                                 }
-                                Text(
-                                    "MAX LOUD",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = NeoPrimary,
-                                    letterSpacing = 1.sp,
-                                    modifier = Modifier
-                                        .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
-                                        .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
-                                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                                )
+                                if (volumeLevels[activeIndex] >= 90) {
+                                    Text(
+                                        "MAX LOUD",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = NeoPrimary,
+                                        letterSpacing = 1.sp,
+                                        modifier = Modifier
+                                            .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
+                                            .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
+                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(24.dp))
 
-                            // Volume bars
-                            val barHeights = listOf(0.40f, 0.60f, 0.75f, 0.90f, 1.00f)
-                            val activeIndex = 3 // 90% bar (4th)
+                            // Interactive volume bars
+                            val barFractions = listOf(0.40f, 0.60f, 0.75f, 0.90f, 1.00f)
                             Row(
                                 modifier = Modifier.fillMaxWidth().height(140.dp).padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                barHeights.forEachIndexed { index, fraction ->
+                                barFractions.forEachIndexed { index, fraction ->
                                     val isActive = index == activeIndex
-                                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .clickable(
+                                                indication = null,
+                                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                            ) {
+                                                selectedVolume = volumeLevels[index]
+                                                EmergencyContactRepository.setVolumePercent(context, volumeLevels[index])
+                                            }
+                                    ) {
                                         // The bar itself
                                         Box(
                                             modifier = Modifier
@@ -494,11 +504,27 @@ fun SettingsScreen(
                     elevation = CardDefaults.cardElevation(1.dp)
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        LinkRow(icon = Icons.Default.SupportAgent, label = "Support")
+                        LinkRow(icon = Icons.Default.SupportAgent, label = "Support") {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                                data = android.net.Uri.parse("mailto:support@emergencyringer.com")
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Emergency Ringer Support")
+                            }
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }
                         Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                        LinkRow(icon = Icons.Default.Policy, label = "Privacy Policy")
+                        LinkRow(icon = Icons.Default.Policy, label = "Privacy Policy") {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://emergencyringer.com/privacy"))
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }
                         Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                        LinkRow(icon = Icons.Default.Share, label = "Share App")
+                        LinkRow(icon = Icons.Default.Share, label = "Share App") {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, "Check out Emergency Ringer - always reachable when it matters! https://play.google.com/store/apps/details?id=${context.packageName}")
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share via"))
+                        }
                     }
                 }
 
@@ -653,12 +679,12 @@ private fun ToneChip(label: String, icon: ImageVector, selected: Boolean, onClic
 }
 
 @Composable
-private fun LinkRow(icon: ImageVector, label: String) {
+private fun LinkRow(icon: ImageVector, label: String, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
