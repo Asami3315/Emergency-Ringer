@@ -131,9 +131,16 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var showSplash by remember { mutableStateOf(true) }
+            val prefs = remember { getSharedPreferences("emergency_ringer_intro", MODE_PRIVATE) }
+            var showIntro by remember { mutableStateOf(!prefs.getBoolean("intro_completed", false)) }
             EmergencyRingerTheme {
                 if (showSplash) {
                     SplashScreen(onFinished = { showSplash = false })
+                } else if (showIntro) {
+                    IntroScreen(onComplete = {
+                        prefs.edit().putBoolean("intro_completed", true).apply()
+                        showIntro = false
+                    })
                 } else {
                 MainScreen(
                     onRequestNotificationAccess = { openNotificationListenerSettings() },
@@ -172,7 +179,7 @@ class MainActivity : ComponentActivity() {
                         ringtonePickerLauncher.launch(intent)
                     }
                 )
-                } // end else (showSplash = false)
+                } // end else (main app)
             }
         }
     }
