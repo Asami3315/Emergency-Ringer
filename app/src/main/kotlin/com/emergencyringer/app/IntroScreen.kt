@@ -46,30 +46,30 @@ private val Screen2GradBottom = Color(0xFFEDE4FF)
 private val Screen2Accent     = Color(0xFFE0C5F5)
 
 private data class IntroPage(
-    val icon: ImageVector,
     val accentColor: Color,
     val gradTop: Color,
     val gradBottom: Color,
     val title: String,
-    val description: String
+    val description: String,
+    val illustrationIndex: Int
 )
 
 private val pages = listOf(
     IntroPage(
-        icon = Icons.Default.Shield,
         accentColor = Screen1Accent,
         gradTop = Screen1GradTop,
         gradBottom = Screen1GradBottom,
         title = "Never Miss an Emergency",
-        description = "Emergency Ringer ensures critical calls from your trusted contacts always ring loud — even when your phone is on silent or Do Not Disturb."
+        description = "Emergency Ringer ensures critical calls from your trusted contacts always ring loud — even when your phone is on silent or Do Not Disturb.",
+        illustrationIndex = 0
     ),
     IntroPage(
-        icon = Icons.Default.People,
         accentColor = Screen2Accent,
         gradTop = Screen2GradTop,
         gradBottom = Screen2GradBottom,
         title = "Your Circle, Protected",
-        description = "Add your emergency contacts — family, doctors, close friends — and customize ringtone, volume, and alerts. Stay connected when it truly matters."
+        description = "Add your emergency contacts — family, doctors, close friends — and customize ringtone, volume, and alerts. Stay connected when it truly matters.",
+        illustrationIndex = 1
     )
 )
 
@@ -198,77 +198,27 @@ private fun IntroPageContent(page: IntroPage) {
                 ),
             contentAlignment = Alignment.Center
         ) {
-            // Decorative background circles
-            val circleAnim = remember { Animatable(0f) }
-            LaunchedEffect(Unit) {
-                circleAnim.animateTo(
-                    1f,
-                    animationSpec = tween(800, delayMillis = 200, easing = FastOutSlowInEasing)
-                )
-            }
-
-            Canvas(
-                modifier = Modifier
-                    .size(288.dp)
-                    .scale(circleAnim.value)
-                    .alpha(0.10f * circleAnim.value)
-            ) {
-                drawCircle(
-                    color = page.accentColor,
-                    radius = size.minDimension / 2
-                )
-            }
-
-            Canvas(
-                modifier = Modifier
-                    .size(400.dp)
-                    .scale(circleAnim.value * 0.8f)
-                    .alpha(0.05f * circleAnim.value)
-            ) {
-                drawCircle(
-                    color = page.accentColor,
-                    radius = size.minDimension / 2
-                )
-            }
-
-            // Icon illustration
-            val iconAnim = remember { Animatable(0.85f) }
-            val iconAlpha = remember { Animatable(0f) }
+            // Illustrations from IntroIllustrations.kt
+            val illustrationAlpha = remember { Animatable(0f) }
+            val illustrationScale = remember { Animatable(0.85f) }
             LaunchedEffect(Unit) {
                 launch {
-                    iconAnim.animateTo(1f, tween(600, delayMillis = 150, easing = FastOutSlowInEasing))
+                    illustrationAlpha.animateTo(1f, tween(600, delayMillis = 150))
                 }
-                iconAlpha.animateTo(1f, tween(600, delayMillis = 150))
+                illustrationScale.animateTo(1f, tween(600, delayMillis = 150, easing = FastOutSlowInEasing))
             }
-
-            // Floating animation
-            val floatOffset by rememberInfiniteTransition(label = "float").animateFloat(
-                initialValue = 0f,
-                targetValue = -8f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(2500, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ), label = "float"
-            )
 
             Box(
                 modifier = Modifier
-                    .size(160.dp)
-                    .offset(y = floatOffset.dp)
-                    .scale(iconAnim.value)
-                    .alpha(iconAlpha.value)
-                    .background(
-                        page.accentColor.copy(alpha = 0.15f),
-                        RoundedCornerShape(40.dp)
-                    ),
+                    .fillMaxSize()
+                    .scale(illustrationScale.value)
+                    .alpha(illustrationAlpha.value),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    page.icon,
-                    contentDescription = null,
-                    tint = page.accentColor,
-                    modifier = Modifier.size(80.dp)
-                )
+                when (page.illustrationIndex) {
+                    0 -> PhonePersonIllustration()
+                    1 -> ProtectedCircleIllustration()
+                }
             }
         }
 

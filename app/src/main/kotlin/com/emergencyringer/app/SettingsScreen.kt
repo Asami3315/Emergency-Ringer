@@ -57,6 +57,7 @@ fun SettingsScreen(
     var ringtoneSource   by remember { mutableStateOf(EmergencyContactRepository.getRingtoneSource(context)) }
     var isPlaying        by remember { mutableStateOf(false) }
     var ringtoneRefresh  by remember { mutableStateOf(0) }
+    var showIntroPreview by remember { mutableStateOf(false) }
 
     val ringtoneName = remember(ringtoneRefresh) {
         val saved = EmergencyContactRepository.getRingtoneName(context)
@@ -72,6 +73,12 @@ fun SettingsScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         ringtoneRefresh++
         ringtoneSource = EmergencyContactRepository.getRingtoneSource(context)
+    }
+
+    // Intro preview overlay
+    if (showIntroPreview) {
+        IntroScreen(onComplete = { showIntroPreview = false })
+        return
     }
 
     Box(
@@ -526,6 +533,19 @@ fun SettingsScreen(
                             context.startActivity(android.content.Intent.createChooser(intent, "Share via"))
                         }
                     }
+                }
+
+                // ── TEST: Preview Intro Screen (temporary) ───
+                OutlinedButton(
+                    onClick = { showIntroPreview = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, NeoPrimary.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
+                ) {
+                    Icon(Icons.Default.Visibility, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Preview Intro Screen", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
 
                 // ── Version footer ────────────────────────────
