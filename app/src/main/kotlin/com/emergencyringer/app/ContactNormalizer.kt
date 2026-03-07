@@ -14,11 +14,16 @@ object ContactNormalizer {
 
     private val INCOMING_CALL_PHRASES = setOf(
         "incoming call",
+        "incoming voice call",
+        "incoming video call",
         "voice call",
         "video call",
+        "whatsapp call",
+        "is calling",
+        "calling you",
         "incoming",
-        "call",
         "ringing",
+        "call",          // WhatsApp / most dialers use this word
         "phone call",
         "anruf",
         "eingehender anruf",

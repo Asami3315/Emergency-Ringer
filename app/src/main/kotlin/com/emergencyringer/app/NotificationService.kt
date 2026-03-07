@@ -1,6 +1,8 @@
 package com.emergencyringer.app
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.RingtoneManager
@@ -96,6 +98,25 @@ class NotificationService : NotificationListenerService() {
         isServiceConnected = true
         Log.i(TAG, "✅ NotificationListenerService CONNECTED")
         AppLog.log("✅ SERVICE CONNECTED - listening for calls!", applicationContext)
+
+        // Keep service alive on MIUI — foreground prevents the OS from killing us mid-call
+        try {
+            val channelId = "er_guard"
+            val nm = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val ch = NotificationChannel(channelId, "Emergency Ringer", NotificationManager.IMPORTANCE_MIN)
+                ch.setShowBadge(false); ch.setSound(null, null); ch.enableVibration(false)
+                nm?.createNotificationChannel(ch)
+            }
+            val n = android.app.Notification.Builder(this, channelId)
+                .setSmallIcon(R.drawable.ic_shield_on)
+                .setContentTitle("Emergency Ringer active")
+                .setContentText("Monitoring for emergency calls")
+                .setOngoing(true).build()
+            startForeground(1001, n)
+        } catch (e: Exception) {
+            Log.w(TAG, "Foreground start failed (non-fatal): ${e.message}")
+        }
         
         // Register phone state listener for call end detection
         registerPhoneStateListener()
@@ -238,7 +259,43 @@ class NotificationService : NotificationListenerService() {
 
         // Log ALL notifications for debugging (helps identify the right package)
         AppLog.log("📥 [$pkg]", applicationContext)
-        
+
+        // ══════════════════════════════════════════════════════════════════
+        // ⚡ FAST PATH — runs FIRST before anything else.
+        // CATEGORY_CALL + title matches emergency contact = trigger immediately.
+        // Bypasses isCallIncoming check (which blocks WhatsApp VoIP on MIUI).
+        // This is the code that worked at 15:22:15.
+        // ══════════════════════════════════════════════════════════════════
+        val fastNotif = sbn.notification
+        if (fastNotif != null && fastNotif.category == Notification.CATEGORY_CALL) {
+            val fastExtras = fastNotif.extras
+            val fastTitle = fastExtras?.getCharSequence(NotificationCompat.EXTRA_TITLE)?.toString()?.trim() ?: ""
+            val fastText  = fastExtras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString()?.trim() ?: ""
+            AppLog.log("⚡ FAST PATH: title='$fastTitle' text='$fastText'", applicationContext)
+            val isMissed = fastText.contains("missed", ignoreCase = true) || fastTitle.contains("missed", ignoreCase = true)
+            if (!isMissed && EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
+                val wl = EmergencyContactRepository.getWhitelistedNames(applicationContext)
+                val hit = wl.any { ContactNormalizer.matches(it, fastTitle) || ContactNormalizer.matches(it, fastText) }
+                AppLog.log("⚡ whitelist=$wl match=$hit", applicationContext)
+                if (hit) {
+                    val now = System.currentTimeMillis()
+                    if (lastTriggeredCaller == fastTitle && (now - lastTriggerTime) < 60_000 && EmergencyContactRepository.isRingerPlaying) {
+                        AppLog.log("⏭️ FAST PATH: ringer already active", applicationContext)
+                    } else {
+                        AppLog.log("🚨 FAST PATH TRIGGER: $fastTitle", applicationContext)
+                        lastTriggeredCaller = fastTitle
+                        lastTriggerTime = now
+                        lastTriggerSbnKey = sbn.key
+                        ringerWasTriggered = true
+                        isCallIncoming = true
+                        EmergencyContactRepository.addTriggerRecord(fastTitle, "Emergency Contact", applicationContext)
+                        RingerManager.triggerEmergencyRinger(applicationContext)
+                        return
+                    }
+                }
+            }
+        }
+
         // Handle message notifications (separate from call notifications)
         if (pkg in MESSAGE_PACKAGES) {
             handleMessageNotification(sbn)
@@ -256,6 +313,7 @@ class NotificationService : NotificationListenerService() {
 
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
+
 
         // DEBUG: Log ALL extras to see actual notification structure on this device
         val allText = buildString {

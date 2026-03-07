@@ -428,37 +428,80 @@ fun SettingsScreen(
                             }
                         }
 
-                        // ── Alarm Tone label + chips ──────────────
+                        // ── Alarm Tone dropdown ──────────────────
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             Text("ALARM TONE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
 
-                            // Phone Ringtone option
                             val isPhone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                ToneChip(
-                                    label = "Phone Ringtone",
-                                    icon = Icons.Default.PhoneAndroid,
-                                    selected = isPhone,
-                                    onClick = {
-                                        ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
-                                        EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
+                            var toneDropdownExpanded by remember { mutableStateOf(false) }
+
+                            // Dropdown trigger
+                            Box {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(NeoBg, RoundedCornerShape(18.dp))
+                                        .border(1.dp, NeoBorderC, RoundedCornerShape(18.dp))
+                                        .clickable(
+                                            indication = null,
+                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                        ) { toneDropdownExpanded = true }
+                                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Icon(
+                                            if (isPhone) Icons.Default.PhoneAndroid else Icons.Default.MusicNote,
+                                            contentDescription = null,
+                                            tint = NeoPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            if (isPhone) "Phone Ringtone" else "Custom Sound",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeoTextC
+                                        )
                                     }
-                                )
-                                ToneChip(
-                                    label = "Custom Sound",
-                                    icon = Icons.Default.MusicNote,
-                                    selected = !isPhone,
-                                    onClick = {
-                                        ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
-                                        EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
-                                    }
-                                )
+                                    Icon(Icons.Default.ExpandMore, contentDescription = null, tint = NeoMutedC, modifier = Modifier.size(22.dp))
+                                }
+
+                                DropdownMenu(
+                                    expanded = toneDropdownExpanded,
+                                    onDismissRequest = { toneDropdownExpanded = false },
+                                    modifier = Modifier.background(Color.White)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                Icon(Icons.Default.PhoneAndroid, null, tint = if (isPhone) NeoPrimary else NeoMutedC, modifier = Modifier.size(20.dp))
+                                                Text("Phone Ringtone", fontWeight = if (isPhone) FontWeight.Bold else FontWeight.Medium, color = if (isPhone) NeoPrimary else NeoTextC)
+                                            }
+                                        },
+                                        onClick = {
+                                            ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_PHONE
+                                            EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_PHONE)
+                                            toneDropdownExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                Icon(Icons.Default.MusicNote, null, tint = if (!isPhone) NeoPrimary else NeoMutedC, modifier = Modifier.size(20.dp))
+                                                Text("Custom Sound", fontWeight = if (!isPhone) FontWeight.Bold else FontWeight.Medium, color = if (!isPhone) NeoPrimary else NeoTextC)
+                                            }
+                                        },
+                                        onClick = {
+                                            ringtoneSource = EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM
+                                            EmergencyContactRepository.setRingtoneSource(context, EmergencyContactRepository.RINGTONE_SOURCE_CUSTOM)
+                                            toneDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
 
-                            // Custom sound row
+                            // Custom sound details
                             if (!isPhone) {
                                 Column(
                                     modifier = Modifier
@@ -824,7 +867,10 @@ private fun SttPermissionsCard(
 @Composable
 private fun SttPermissionRow(title: String, granted: Boolean, onRequest: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onRequest() }
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -29,6 +29,11 @@
     
     <!-- Permission for vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Foreground service — keeps the notification listener alive on MIUI/aggressive OEMs -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        tools:ignore="ProtectedPermissions" />
     
     <!-- Permission for flashlight strobe -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -71,13 +76,14 @@
         <service
             android:name=".NotificationService"
             android:exported="true"
+            android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-            <meta-data
-                android:name="android.service.notification.default_filter_types"
-                android:value="conversations|alerting" />
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Emergency call monitoring" />
         </service>
         
         <!-- Quick Settings Tile Service -->
@@ -91,5 +97,15 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- Fallback: BroadcastReceiver for direct PHONE_STATE trigger -->
+        <!-- Fires for all incoming calls even if NotificationListenerService is disconnected -->
+        <receiver
+            android:name=".CallReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

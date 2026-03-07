@@ -44,6 +44,10 @@ object RingerManager {
     
     private var stopHandler: Handler? = null
     private var stopRunnable: Runnable? = null
+    
+    // Saved state to restore after alarm stops
+    private var savedRingerMode: Int = AudioManager.RINGER_MODE_NORMAL
+    private var savedDndFilter: Int = -1
 
     fun triggerEmergencyRinger(
         context: Context,
@@ -69,8 +73,10 @@ object RingerManager {
                 AppLog.log("🔕 DND: filter=$currentFilter access=$hasAccess", context)
                 if (hasAccess && currentFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
                     try {
+                        savedDndFilter = currentFilter
                         nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
-                        AppLog.log("✅ DND turned OFF", context)
+                        AppLog.log("✅ DND turned OFF (was=$currentFilter)", context)
+                        // NOTE: No Thread.sleep here — safe from any thread/context
                     } catch (e: Exception) {
                         AppLog.log("⚠️ DND off failed: ${e.message}", context)
                     }
@@ -80,20 +86,38 @@ object RingerManager {
             }
 
             // ══════════════════════════════════════
-            // STEP 2: Max ALARM volume (bypasses DND)
+            // STEP 2: Force ringer mode to NORMAL + Max ALARM volume
             // ══════════════════════════════════════
             try {
+                // Save original ringer mode so we can restore later
+                savedRingerMode = am.ringerMode
+                AppLog.log("📱 Original ringer mode: ${savedRingerMode} (0=SILENT,1=VIBRATE,2=NORMAL)", context)
+                
+                // Force ringer mode to NORMAL — critical for DND/silent bypass on most OEMs
+                am.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                AppLog.log("📱 Ringer mode set to NORMAL", context)
+            } catch (e: Exception) {
+                AppLog.log("⚠️ Ringer mode error: ${e.message}", context)
+            }
+            
+            try {
+                // Unmute and max ALARM stream (USAGE_ALARM bypasses DND)
                 am.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0)
                 val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
                 am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
                 AppLog.log("🔔 Alarm vol = $maxAlarm/$maxAlarm", context)
+                
+                // Also max out MUSIC stream as backup (some custom ringtones use it)
+                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+                val maxMusic = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+                AppLog.log("🎵 Music vol = $maxMusic/$maxMusic", context)
             } catch (e: Exception) {
-                AppLog.log("⚠️ Alarm vol error: ${e.message}", context)
+                AppLog.log("⚠️ Volume error: ${e.message}", context)
             }
 
             // ══════════════════════════════════════
-            // STEP 3: Mute RING stream (no dual ringtone)
-            // NOTE: Do NOT set ringerMode - it can re-enable DND!
+            // STEP 3: Mute RING stream (no dual ringtone from default dialer)
             // ══════════════════════════════════════
             try {
                 am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
@@ -187,10 +211,23 @@ object RingerManager {
                         Log.e(TAG, "MediaPlayer failed: ${e.message}", e)
                     }
 
-                    // Fallback: Ringtone API also bypasses DND with USAGE_ALARM
+                    // Fallback: custom URI failed — use system ALARM ringtone (guaranteed accessible)
                     if (!playerStarted) {
                         try {
-                            val rt = RingtoneManager.getRingtone(context, uri ?: getAlarmUri(context))
+                            // Use system alarm URI, not the failed custom URI
+                            val fallbackUri =
+                                RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
+                                    ?: RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+                                    ?: getAlarmUri(context)
+                            AppLog.log("🔁 Fallback URI: $fallbackUri", context)
+
+                            // Unmute RING stream so fallback is audible even if we muted it earlier
+                            try {
+                                val maxRing = am.getStreamMaxVolume(AudioManager.STREAM_RING)
+                                am.setStreamVolume(AudioManager.STREAM_RING, maxRing, 0)
+                            } catch (_: Exception) {}
+
+                            val rt = RingtoneManager.getRingtone(context, fallbackUri)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 rt?.audioAttributes = AudioAttributes.Builder()
                                     .setUsage(AudioAttributes.USAGE_ALARM)
@@ -198,9 +235,9 @@ object RingerManager {
                                     .build()
                             }
                             rt?.play()
-                            ringtone = rt  // store so stopCurrentRinger() can stop it
+                            ringtone = rt
                             EmergencyContactRepository.isRingerPlaying = true
-                            AppLog.log("✅ Ringtone API fallback started", context)
+                            AppLog.log("✅ Ringtone fallback (ALARM URI) started", context)
                         } catch (e2: Exception) {
                             AppLog.log("❌ Both audio methods failed: ${e2.message}", context)
                         }
@@ -316,6 +353,36 @@ object RingerManager {
         stopFlashlight()
         
         EmergencyContactRepository.isRingerPlaying = false
+    }
+    
+    /**
+     * Restore the phone to its original ringer/DND state.
+     * Call this after stopping the ringer.
+     */
+    fun restoreAudioState(context: Context) {
+        try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (am != null && savedRingerMode != AudioManager.RINGER_MODE_NORMAL) {
+                am.ringerMode = savedRingerMode
+                AppLog.log("📱 Ringer mode restored to $savedRingerMode", context)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not restore ringer mode: ${e.message}")
+        }
+        
+        // Restore DND if it was active before
+        try {
+            if (savedDndFilter > 0 && savedDndFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                if (nm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm.isNotificationPolicyAccessGranted) {
+                    nm.setInterruptionFilter(savedDndFilter)
+                    AppLog.log("🔕 DND restored to filter=$savedDndFilter", context)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not restore DND: ${e.message}")
+        }
+        savedDndFilter = -1
     }
     
     // ═══════════════════════════════════════

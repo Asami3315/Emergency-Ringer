@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var showSplash by remember { mutableStateOf(true) }
             val prefs = remember { getSharedPreferences("emergency_ringer_intro", MODE_PRIVATE) }
-            var showIntro by remember { mutableStateOf(!prefs.getBoolean("intro_completed", false)) }
+            var showIntro by remember { mutableStateOf(true) } // TEMP: always show for testing
             EmergencyRingerTheme {
                 if (showSplash) {
                     SplashScreen(onFinished = { showSplash = false })
@@ -325,10 +325,20 @@ fun MainScreen(
     var monitoringEnabled by remember { mutableStateOf(EmergencyContactRepository.isMonitoringEnabled(context)) }
     var currentTab by remember { mutableStateOf(0) }   // 0=Home 1=History 2=Settings
 
-    // Re-read state on resume
+    // ── Reactive permission states ───────────────────────
+    var permNotification by remember { mutableStateOf(hasNotificationAccess()) }
+    var permDnd by remember { mutableStateOf(hasDndAccess()) }
+    var permContacts by remember { mutableStateOf(hasContactsPermission()) }
+    var permBattery by remember { mutableStateOf(isBatteryOptimizationDisabled()) }
+
+    // Re-read ALL state on resume (including permissions)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         contacts = EmergencyContactRepository.getWhitelistSync(context)
         monitoringEnabled = EmergencyContactRepository.isMonitoringEnabled(context)
+        permNotification = hasNotificationAccess()
+        permDnd = hasDndAccess()
+        permContacts = hasContactsPermission()
+        permBattery = isBatteryOptimizationDisabled()
     }
 
     // Also sync monitoring toggle in real-time from Quick Settings tile changes
@@ -347,10 +357,10 @@ fun MainScreen(
         // ── Tab content ──────────────────────────────────────
         when (currentTab) {
             0 -> HomeScreen(
-                hasNotificationAccess     = hasNotificationAccess(),
-                hasDndAccess              = hasDndAccess(),
-                hasContactsPermission     = hasContactsPermission(),
-                isBatteryOptDisabled      = isBatteryOptimizationDisabled(),
+                hasNotificationAccess     = permNotification,
+                hasDndAccess              = permDnd,
+                hasContactsPermission     = permContacts,
+                isBatteryOptDisabled      = permBattery,
                 contacts                  = contacts,
                 monitoringEnabled         = monitoringEnabled,
                 onMonitoringToggle        = { enabled ->
@@ -371,9 +381,9 @@ fun MainScreen(
                 onStopRinger        = onStopRinger,
                 vibrantPurple       = Color(0xFFFFB703),
                 deepPurple          = Color(0xFFE6A200),
-                hasNotificationAccess = hasNotificationAccess(),
-                hasDndAccess          = hasDndAccess(),
-                isBatteryOptDisabled  = isBatteryOptimizationDisabled(),
+                hasNotificationAccess = permNotification,
+                hasDndAccess          = permDnd,
+                isBatteryOptDisabled  = permBattery,
                 onRequestNotification = onRequestNotificationAccess,
                 onRequestDnd          = onRequestDndAccess,
                 onRequestBattery      = onRequestBatteryOptimization

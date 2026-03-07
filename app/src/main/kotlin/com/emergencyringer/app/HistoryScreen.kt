@@ -1,5 +1,9 @@
 package com.emergencyringer.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context as AndroidContext
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +52,14 @@ fun HistoryScreen() {
     val context = LocalContext.current
     var history by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory(context)) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showDebugLog by remember { mutableStateOf(false) }
+    val logMessages by AppLog.messages.collectAsState()
+
+    // Refresh AppLog from file (in case service wrote logs while app was closed)
+    LaunchedEffect(Unit) {
+        AppLog.init(context)
+        AppLog.refreshFromFile()
+    }
 
     if (showClearDialog) {
         AlertDialog(
@@ -76,7 +88,11 @@ fun HistoryScreen() {
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFFFDFBF7), WBg)))
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
 
             // ── Header ────────────────────────────────────────
             Box(
@@ -106,7 +122,13 @@ fun HistoryScreen() {
             }
 
             if (history.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                // Empty state
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -128,14 +150,11 @@ fun HistoryScreen() {
                     }
                 }
             } else {
-                // Scrollable list — Clear button is INSIDE the scroll at the bottom
+                // Scrollable list
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .fillMaxWidth()
                         .padding(start = 20.dp, end = 16.dp)
-                        // Bottom padding = nav bar (~80dp) + some extra breathing room
-                        .padding(bottom = 96.dp)
                 ) {
                     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                     val today = sdf.format(Date())
@@ -325,10 +344,108 @@ fun HistoryScreen() {
                     }
                 }
             }
+
+            // ── Debug Log Section ──────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 96.dp, top = 8.dp)
+            ) {
+                // Toggle header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1A1A1A))
+                        .clickable { showDebugLog = !showDebugLog
+                            if (showDebugLog) AppLog.refreshFromFile() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.BugReport, null,
+                            tint = Color(0xFFFFB703), modifier = Modifier.size(18.dp))
+                        Text("Debug Log", color = Color.White,
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        if (logMessages.isNotEmpty()) {
+                            Text("(${logMessages.size})", color = Color(0xFFFFB703), fontSize = 12.sp)
+                        }
+                    }
+                    Icon(
+                        if (showDebugLog) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        null, tint = Color.White.copy(0.6f), modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (showDebugLog) {
+                    Spacer(Modifier.height(4.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF111111))
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
+                    ) {
+                        if (logMessages.isEmpty()) {
+                            Text("No logs yet. Trigger a call or toggle notification access.",
+                                color = Color(0xFF888888), fontSize = 11.sp)
+                        } else {
+                            logMessages.reversed().forEach { msg ->
+                                Text(msg, color = when {
+                                    msg.contains("🚨") || msg.contains("EMERGENCY") -> Color(0xFFFF6B6B)
+                                    msg.contains("✅") -> Color(0xFF6BFF9E)
+                                    msg.contains("⚠️") || msg.contains("❌") -> Color(0xFFFFD166)
+                                    msg.contains("═══") -> Color(0xFFFFB703)
+                                    msg.contains("🔍") -> Color(0xFF74C0FC)
+                                    else -> Color(0xFFCCCCCC)
+                                }, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                lineHeight = 16.sp)
+                                Spacer(Modifier.height(1.dp))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // ── Copy All button ──
+                        OutlinedButton(
+                            onClick = {
+                                val all = logMessages.joinToString("\n")
+                                val clipboard = context.getSystemService(AndroidContext.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Emergency Ringer Log", all))
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(50.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF74C0FC))
+                        ) {
+                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Copy All", fontSize = 13.sp)
+                        }
+                        // ── Clear button ──
+                        OutlinedButton(
+                            onClick = { AppLog.clear() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(50.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF6B6B))
+                        ) {
+                            Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Clear Log", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
         }
     }
 }
-
 // ── Style per event type ──────────────────────────────────────
 private data class RowStyle(
     val iconBg: Color, val iconTint: Color, val icon: ImageVector,
