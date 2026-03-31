@@ -48,6 +48,11 @@ private val Screen2GradTop    = Color(0xFFF5F0FF)
 private val Screen2GradBottom = Color(0xFFEDE4FF)
 private val Screen2Accent     = Color(0xFFE0C5F5)
 
+// Screen 3 colors (green/teal)
+private val Screen3GradTop    = Color(0xFFE8FFF0)
+private val Screen3GradBottom = Color(0xFFD0F5E0)
+private val Screen3Accent     = Color(0xFF7DDBA3)
+
 private data class IntroPage(
     val drawableRes: Int,
     val accentColor: Color,
@@ -75,6 +80,15 @@ private val pages = listOf(
         gradBottom = Screen2GradBottom,
         title = "Your Circle, Protected",
         description = "Add your emergency contacts — family, doctors, close friends — and customize ringtone, volume, and alerts. Stay connected when it truly matters."
+    ),
+    IntroPage(
+        drawableRes = R.drawable.intro_always_guard,
+        accentColor = Screen3Accent,
+        gradTop = Screen3GradTop,
+        gradBottom = Screen3GradBottom,
+        title = "Always on Guard",
+        description = "Emergency Ringer runs quietly in the background. Simply grant silent-mode access, and we’ll handle the rest — keeping you safe 24/7 without draining your battery.",
+        imageSize = 0.90f
     )
 )
 

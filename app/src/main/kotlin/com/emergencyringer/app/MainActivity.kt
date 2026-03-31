@@ -40,6 +40,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -382,51 +383,79 @@ fun MainScreen(
                 vibrantPurple       = Color(0xFFFFB703),
                 deepPurple          = Color(0xFFE6A200),
                 hasNotificationAccess = permNotification,
-                hasDndAccess          = permDnd,
                 isBatteryOptDisabled  = permBattery,
                 onRequestNotification = onRequestNotificationAccess,
-                onRequestDnd          = onRequestDndAccess,
                 onRequestBattery      = onRequestBatteryOptimization
             )
         }
 
-        // ── Bottom Navigation ────────────────────────────────
+        // ── Bottom Navigation (iPhone glassmorphic style) ──────
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp)
-                .padding(horizontal = 48.dp)
+                .padding(bottom = 24.dp)
+                .padding(horizontal = 52.dp)
         ) {
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color(0xFF1A1A1A))
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(40.dp),
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 20.dp,
+                        shape = RoundedCornerShape(26.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.10f),
+                        spotColor = Color.Black.copy(alpha = 0.07f)
+                    )
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Color(0xFFFAF9F6).copy(alpha = 0.96f))
+                    .border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(26.dp))
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NavItem(icon = Icons.Default.GridView,   selected = currentTab == 0) { currentTab = 0 }
-                NavItem(icon = Icons.Default.History,    selected = currentTab == 1) { currentTab = 1 }
-                NavItem(icon = Icons.Default.Settings,   selected = currentTab == 2) { currentTab = 2 }
+                GlassNavItem(icon = Icons.Default.GridView, label = "Home",     selected = currentTab == 0) { currentTab = 0 }
+                GlassNavItem(icon = Icons.Default.History,  label = "History",  selected = currentTab == 1) { currentTab = 1 }
+                GlassNavItem(icon = Icons.Default.Settings, label = "Settings", selected = currentTab == 2) { currentTab = 2 }
             }
         }
     }
 }
 
 @Composable
-private fun NavItem(icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
-    Box(
+private fun GlassNavItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val accentColor = Color(0xFFFFB703)
+    val animatedSize by animateDpAsState(
+        targetValue = if (selected) 22.dp else 20.dp,
+        animationSpec = tween(200), label = "iconSize"
+    )
+
+    Column(
         modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ) { onClick() }
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Icon(
             icon,
-            contentDescription = null,
-            tint = if (selected) Color(0xFFFFB703) else Color.White.copy(alpha = 0.5f),
-            modifier = Modifier.size(26.dp)
+            contentDescription = label,
+            tint = if (selected) accentColor else Color(0xFF8A8A8A),
+            modifier = Modifier.size(animatedSize)
+        )
+        Text(
+            label,
+            fontSize = 9.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) accentColor else Color(0xFF8A8A8A),
+            letterSpacing = 0.2.sp
         )
     }
 }
