@@ -123,7 +123,7 @@ fun IntroScreen(onComplete: () -> Unit) {
                     )
                 )
                 .padding(horizontal = 32.dp)
-                .padding(top = 16.dp, bottom = 40.dp),
+                .padding(top = 24.dp, bottom = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Page indicators
@@ -211,7 +211,7 @@ private fun IntroPageContent(page: IntroPage) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.55f)
+                .fillMaxHeight(0.48f)
                 .background(
                     Brush.verticalGradient(listOf(page.gradTop, page.gradBottom))
                 ),
@@ -436,7 +436,7 @@ private fun IntroPageContent(page: IntroPage) {
                 .fillMaxSize()
                 .background(IntroBg)
                 .padding(horizontal = 32.dp)
-                .padding(top = 32.dp, bottom = 80.dp),
+                .padding(top = 24.dp, bottom = 170.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val textAlpha = remember { Animatable(0f) }

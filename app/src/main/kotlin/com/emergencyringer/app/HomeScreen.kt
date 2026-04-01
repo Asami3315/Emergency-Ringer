@@ -21,7 +21,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,49 +61,14 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(NeoBackground)
     ) {
-        // ── Background glow blobs (radial gradient = CSS blur equivalent) ──
-        // Top-right: warm amber sun glow — bigger & brighter
-        Canvas(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 100.dp, y = (-80).dp)
-                .size(440.dp)
-        ) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.0f to Color(0xFFFFB703).copy(alpha = 0.28f),
-                        0.35f to Color(0xFFFFD569).copy(alpha = 0.16f),
-                        0.65f to Color(0xFFFFF3D0).copy(alpha = 0.08f),
-                        1.0f to Color.Transparent
-                    ),
-                    center = center,
-                    radius = size.minDimension / 2f
-                )
-            )
-        }
-        // Bottom-left: subtle purple glow — bottom-[100px] left-[-50px] w-[250px]
-        Canvas(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .offset(x = (-40).dp, y = (-80).dp)
-                .size(260.dp)
-        ) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = arrayOf(
-                        0.0f to Color(0xFF6B66C5).copy(alpha = 0.08f),
-                        0.5f to Color(0xFF6B66C5).copy(alpha = 0.03f),
-                        1.0f to Color.Transparent
-                    ),
-                    center = center,
-                    radius = size.minDimension / 2f
-                )
-            )
-        }
-
+        // ── Background image ──
+        Image(
+            painter = painterResource(id = R.drawable.home_bg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
 
         Column(modifier = Modifier.fillMaxSize()) {
             Column(

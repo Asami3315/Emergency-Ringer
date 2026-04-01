@@ -412,7 +412,7 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                GlassNavItem(icon = Icons.Default.GridView, label = "Home",     selected = currentTab == 0) { currentTab = 0 }
+                GlassNavItem(icon = Icons.Default.Home, label = "Home",     selected = currentTab == 0) { currentTab = 0 }
                 GlassNavItem(icon = Icons.Default.History,  label = "History",  selected = currentTab == 1) { currentTab = 1 }
                 GlassNavItem(icon = Icons.Default.Settings, label = "Settings", selected = currentTab == 2) { currentTab = 2 }
             }
