@@ -16,9 +16,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -26,6 +27,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -417,34 +420,58 @@ private fun ContactCard(contact: EmergencyContactRepository.Contact, accentColor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddContactCard(onAddContact: () -> Unit) {
-    Card(
-        onClick = onAddContact,
+    val borderColor = Color(0xFFD6CBC2)
+    val textColor = Color(0xFF6B5E55)
+    
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight()               // match sibling card height in Row
-            .defaultMinSize(minHeight = 180.dp),
-        shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = NeoCard),
-        elevation = CardDefaults.cardElevation(0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDDDDDD).copy(alpha = 0.8f))
+            .fillMaxHeight()
+            .defaultMinSize(minHeight = 180.dp)
+            .drawBehind {
+                val strokeWidth = 2.dp.toPx()
+                val dashWidth = 8.dp.toPx()
+                val dashGap = 6.dp.toPx()
+                val cornerRadius = 32.dp.toPx()
+                
+                drawRoundRect(
+                    color = borderColor,
+                    style = Stroke(
+                        width = strokeWidth,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashWidth, dashGap), 0f)
+                    ),
+                    cornerRadius = CornerRadius(cornerRadius)
+                )
+            }
+            .clip(RoundedCornerShape(32.dp))
+            .clickable { onAddContact() },
+        contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .background(Color(0xFFF5F5F5), CircleShape),
+                    .size(64.dp)
+                    .background(Color(0xFFF5F2EF), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = NeoYellow, modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Default.Add, 
+                    contentDescription = null, 
+                    tint = textColor, 
+                    modifier = Modifier.size(28.dp)
+                )
             }
-            Spacer(Modifier.height(12.dp))
-            Text("Add Contact", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeoMuted)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "ADD CONTACT", 
+                fontSize = 13.sp, 
+                fontWeight = FontWeight.Bold, 
+                color = textColor,
+                letterSpacing = 1.sp
+            )
         }
     }
 }
@@ -452,32 +479,51 @@ private fun AddContactCard(onAddContact: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EmptyContactsCard(onAddContact: () -> Unit) {
-    Card(
-        onClick = onAddContact,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = NeoCard),
-        elevation = CardDefaults.cardElevation(0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFDDDDDD))
+    val borderColor = Color(0xFFD6CBC2)
+    val textColor = Color(0xFF6B5E55)
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val strokeWidth = 2.dp.toPx()
+                val dashWidth = 8.dp.toPx()
+                val dashGap = 6.dp.toPx()
+                val cornerRadius = 28.dp.toPx()
+                
+                drawRoundRect(
+                    color = borderColor,
+                    style = Stroke(
+                        width = strokeWidth,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dashWidth, dashGap), 0f)
+                    ),
+                    cornerRadius = CornerRadius(cornerRadius)
+                )
+            }
+            .clip(RoundedCornerShape(28.dp))
+            .clickable { onAddContact() },
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(
                 modifier = Modifier
                     .size(64.dp)
-                    .background(NeoYellow.copy(alpha = 0.1f), CircleShape),
+                    .background(Color(0xFFF5F2EF), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.PersonAdd, contentDescription = null, tint = NeoYellow, modifier = Modifier.size(34.dp))
+                Icon(Icons.Default.PersonAdd, contentDescription = null, tint = textColor, modifier = Modifier.size(34.dp))
             }
-            Text("No emergency contacts yet", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = NeoText)
-            Text("Tap to add someone who can bypass silent mode", fontSize = 13.sp, color = NeoMuted,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("No emergency contacts yet", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor)
+                Text("Tap to add someone who can bypass silent mode", fontSize = 13.sp, color = textColor.copy(alpha = 0.7f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+            }
         }
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -448,8 +449,9 @@ fun SettingsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(NeoBg, RoundedCornerShape(24.dp))
-                                .border(1.dp, NeoBorderC, RoundedCornerShape(24.dp))
+                                .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.06f))
+                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+                                .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
                                 .padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -574,11 +576,12 @@ fun SettingsScreen(
                 }
 
                 // ── Links (Support / Privacy / Share) ─────────
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = SttCard),
-                    elevation = CardDefaults.cardElevation(1.dp)
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                        .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp)),
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         LinkRow(icon = Icons.Default.SupportAgent, label = "Support") {
@@ -692,11 +695,12 @@ private fun ShieldStatusCard() {
 
 @Composable
 private fun NeoSettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = SttCard),
-        elevation = CardDefaults.cardElevation(1.dp)
+    Box(
+        modifier = modifier
+            .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
     ) {
         Column(modifier = Modifier.padding(28.dp), content = content)
     }
@@ -805,11 +809,12 @@ private fun SttPermissionsCard(
     val readyCount = listOf(hasNotificationAccess, isBatteryOptDisabled).count { it }
     var expanded by remember { mutableStateOf(readyCount < 2) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = SttCard),
-        elevation = CardDefaults.cardElevation(1.dp)
+    Box(
+        modifier = Modifier.fillMaxWidth()
+            .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+            .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+            .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             // Header row (always visible, tap to expand)

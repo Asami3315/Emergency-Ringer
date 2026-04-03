@@ -17,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -124,23 +126,12 @@ fun HistoryScreen() {
                     .padding(horizontal = 20.dp)
                     .padding(top = 52.dp, bottom = 16.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(WFloat)
-                        .align(Alignment.CenterStart),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.ArrowBack, null, tint = WMuted, modifier = Modifier.size(20.dp))
-                }
                 Text(
                     "History Log",
                     modifier = Modifier.align(Alignment.Center),
                     fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
                     color = WText, letterSpacing = (-0.3).sp
                 )
-                Spacer(Modifier.size(40.dp).align(Alignment.CenterEnd))
             }
 
             if (history.isEmpty()) {
@@ -371,22 +362,19 @@ fun HistoryScreen() {
 
                     // ── Clear History at bottom of scroll ──────────
                     Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = { showClearDialog = true },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFFFFF),
-                            contentColor = BadgeRTxt
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(4.dp)
+                            .height(56.dp)
+                            .shadow(12.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.15f))
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(28.dp))
+                            .background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(28.dp))
+                            .clip(RoundedCornerShape(28.dp))
+                            .clickable { showClearDialog = true },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.DeleteForever, null,
-                            modifier = Modifier.size(20.dp), tint = BadgeRTxt)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Clear History", fontSize = 15.sp,
+                        Text("Clear History", fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold, color = BadgeRTxt)
                     }
                 }
