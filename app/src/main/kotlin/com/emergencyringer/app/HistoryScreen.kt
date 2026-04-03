@@ -97,6 +97,19 @@ fun HistoryScreen() {
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
+        // Semi-transparent overlay for readability
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.10f))
+        )
+        // Top white gradient shade for header readability
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .background(Brush.verticalGradient(listOf(Color(0xFFFDFBF7).copy(alpha = 0.9f), Color.Transparent)))
+        )
 
         Column(
             modifier = Modifier
@@ -108,7 +121,6 @@ fun HistoryScreen() {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color(0xFFFDFBF7), Color(0x00FDFBF7))))
                     .padding(horizontal = 20.dp)
                     .padding(top = 52.dp, bottom = 16.dp)
             ) {
@@ -187,10 +199,27 @@ fun HistoryScreen() {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = if (groupIdx == 0) 4.dp else 20.dp, bottom = 14.dp),
+                                .height(IntrinsicSize.Min),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(modifier = Modifier.width(38.dp), contentAlignment = Alignment.Center) {
+                            Column(
+                                modifier = Modifier
+                                    .width(38.dp)
+                                    .fillMaxHeight(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                val topSpace = if (groupIdx == 0) 4.dp else 20.dp
+                                if (groupIdx > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .height(topSpace)
+                                            .width(2.dp)
+                                            .background(WLine)
+                                    )
+                                } else {
+                                    Spacer(Modifier.height(topSpace))
+                                }
+
                                 Box(
                                     modifier = Modifier
                                         .size(8.dp)
@@ -199,10 +228,18 @@ fun HistoryScreen() {
                                             CircleShape
                                         )
                                 )
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .width(2.dp)
+                                        .background(WLine)
+                                )
                             }
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 dateLabel.uppercase(Locale.getDefault()),
+                                modifier = Modifier.padding(top = if (groupIdx == 0) 4.dp else 22.dp, bottom = 14.dp),
                                 fontSize = 11.sp, fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp, color = WMuted
                             )

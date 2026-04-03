@@ -2,8 +2,10 @@ package com.emergencyringer.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -40,6 +42,7 @@ class SplashActivity : ComponentActivity() {
 
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
+    val context = LocalContext.current
 
     // ── Phase state: logo → text → exit ──────────────────────
     var phase by remember { mutableStateOf<SplashPhase>(SplashPhase.Logo) }
@@ -92,6 +95,15 @@ fun SplashScreen(onFinished: () -> Unit) {
 
     // ── Animation sequence ────────────────────────────────────
     LaunchedEffect(Unit) {
+        // Play bell sound
+        try {
+            val mediaPlayer = MediaPlayer.create(context, R.raw.splash_bell)
+            mediaPlayer.setOnCompletionListener { it.release() }
+            mediaPlayer.start()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         // Rings + glow appear
         launch {
             ringAlpha1.animateTo(0.08f, tween(1500, easing = EaseOut))
