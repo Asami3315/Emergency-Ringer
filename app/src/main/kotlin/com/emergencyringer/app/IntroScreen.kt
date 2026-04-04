@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import com.emergencyringer.app.magneticAffinity
 
 // ── Colors from TSX ──────────────────────────────────────────
 private val IntroBg       = Color(0xFFF5F3EF)
@@ -163,7 +164,8 @@ fun IntroScreen(onComplete: () -> Unit) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(56.dp)
+                    .magneticAffinity(strength = 0.15f),
                 shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = IntroPrimary,

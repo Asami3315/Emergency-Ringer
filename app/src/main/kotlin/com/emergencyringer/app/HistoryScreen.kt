@@ -312,6 +312,7 @@ fun HistoryScreen() {
                                  Card(
                                      modifier = Modifier
                                          .weight(1f)
+                                         .weightedSpring()
                                          .padding(bottom = 20.dp),
                                      shape = RoundedCornerShape(20.dp),
                                      colors = CardDefaults.cardColors(containerColor = Color(0xA6FFFFFF)),
@@ -366,6 +367,7 @@ fun HistoryScreen() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .magneticAffinity(strength = 0.2f)
                             .shadow(12.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.15f))
                             .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(28.dp))
                             .background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(28.dp))

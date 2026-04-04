@@ -19,7 +19,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import com.emergencyringer.app.magneticAffinity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -105,14 +107,14 @@ fun HomeScreen(
                 ) {
                     Column {
                         Text(
-                            "Pro Dashboard",
+                            "KinLink",
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = NeoText,
                             letterSpacing = (-0.5).sp
                         )
                         Text(
-                            if (allPermsReady) "System optimal & secure" else "Setup required",
+                            if (allPermsReady) "All systems guarded" else "Setup required",
                             fontSize = 13.sp,
                             color = NeoMuted,
                             fontWeight = FontWeight.Medium
@@ -138,17 +140,11 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Priority Contacts",
+                        "My Inner Circle",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = NeoText,
                         letterSpacing = (-0.5).sp
-                    )
-                    Icon(
-                        Icons.Default.ArrowForward,
-                        contentDescription = null,
-                        tint = NeoMuted,
-                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -206,7 +202,14 @@ private fun HeroStatusCard(
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 20.dp,
+                shape = RoundedCornerShape(32.dp),
+                ambientColor = Color.Black.copy(alpha = 0.08f),
+                spotColor = Color.Black.copy(alpha = 0.05f)
+            ),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(0.dp)
@@ -215,15 +218,10 @@ private fun HeroStatusCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.9f),
-                            Color.White.copy(alpha = 0.6f)
-                        )
-                    ),
+                    Color(0xFFFAF9F6).copy(alpha = 0.85f),
                     RoundedCornerShape(32.dp)
                 )
-                .border(1.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(32.dp))
+                .border(1.dp, Color.White, RoundedCornerShape(32.dp))
                 .padding(24.dp)
         ) {
             Column {
@@ -263,24 +261,10 @@ private fun HeroStatusCard(
                                         )
                                 )
                             }
-                            Text(
-                                if (isActive && monitoringEnabled) "ACTIVE" else "INACTIVE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp,
-                                color = NeoText
-                            )
                         }
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "System",
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = NeoText,
-                            lineHeight = 32.sp
-                        )
-                        Text(
-                            if (isActive && monitoringEnabled) "Protected" else "Sleeping",
+                            if (isActive && monitoringEnabled) "Active" else "Sleeping",
                             fontSize = 30.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = NeoText,
@@ -307,16 +291,7 @@ private fun HeroStatusCard(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
 
-                Text(
-                    "Priority filtering enabled. Silent mode bypass active for whitelist.",
-                    fontSize = 13.sp,
-                    color = NeoMuted,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.width(200.dp)
-                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -332,7 +307,7 @@ private fun HeroStatusCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "MASTER CONTROL",
+                        "Live Shield",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp,
@@ -361,7 +336,8 @@ private fun ContactCard(contact: EmergencyContactRepository.Contact, accentColor
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .defaultMinSize(minHeight = 180.dp),
+            .defaultMinSize(minHeight = 180.dp)
+            .magneticAffinity(strength = 0.12f),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = accentColor),
         elevation = CardDefaults.cardElevation(0.dp)
@@ -428,6 +404,7 @@ private fun AddContactCard(onAddContact: () -> Unit) {
             .fillMaxWidth()
             .fillMaxHeight()
             .defaultMinSize(minHeight = 180.dp)
+            .magneticAffinity(strength = 0.15f)
             .drawBehind {
                 val strokeWidth = 2.dp.toPx()
                 val dashWidth = 8.dp.toPx()
@@ -460,17 +437,25 @@ private fun AddContactCard(onAddContact: () -> Unit) {
                 Icon(
                     Icons.Default.Add, 
                     contentDescription = null, 
-                    tint = textColor, 
+                    tint = NeoYellow, 
                     modifier = Modifier.size(28.dp)
                 )
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
-                "ADD CONTACT", 
-                fontSize = 13.sp, 
+                "Add New", 
+                fontSize = 18.sp, 
                 fontWeight = FontWeight.Bold, 
+                color = NeoText
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Invite members to stay connected", 
+                fontSize = 12.sp, 
+                fontWeight = FontWeight.Medium, 
                 color = textColor,
-                letterSpacing = 1.sp
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
     }
@@ -485,6 +470,7 @@ private fun EmptyContactsCard(onAddContact: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .magneticAffinity(strength = 0.15f)
             .drawBehind {
                 val strokeWidth = 2.dp.toPx()
                 val dashWidth = 8.dp.toPx()

@@ -151,10 +151,18 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .background(Color(0xFFFFF3E0), RoundedCornerShape(20.dp)),
+                                    .background(
+                                        if (msgEnabled) Color(0xFFFFF3E0) else Color(0xFFF3F4F6), 
+                                        RoundedCornerShape(20.dp)
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Chat, contentDescription = null, tint = Color(0xFFE67E22), modifier = Modifier.size(24.dp))
+                                Icon(
+                                    Icons.Default.Chat, 
+                                    contentDescription = null, 
+                                    tint = if (msgEnabled) Color(0xFFE67E22) else NeoMutedC, 
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
                             Column {
                                 Text("Message Alerts", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
@@ -226,6 +234,7 @@ fun SettingsScreen(
                                             .weight(1f)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(if (selected) NeoPrimary else Color.Transparent)
+                                            .weightedSpring()
                                             .clickable(
                                                 indication = null,
                                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -309,6 +318,7 @@ fun SettingsScreen(
                                 tint = if (isMuted) NeoMutedC else NeoPrimary,
                                 modifier = Modifier
                                     .size(24.dp)
+                                    .weightedSpring()
                                     .clickable(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -547,7 +557,7 @@ fun SettingsScreen(
                                 ) {
                                     OutlinedButton(
                                         onClick = onSelectRingtone,
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp).weightedSpring(),
                                         shape = RoundedCornerShape(14.dp),
                                         border = BorderStroke(1.dp, NeoPrimary),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
@@ -558,7 +568,7 @@ fun SettingsScreen(
                                     }
                                     Button(
                                         onClick = if (isPlaying) onStopRinger else onTestRinger,
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp).weightedSpring(),
                                         shape = RoundedCornerShape(14.dp),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (isPlaying) Color(0xFFC53030) else NeoPrimary
@@ -718,6 +728,7 @@ private fun CircleIconButton(
             .clip(CircleShape)
             .background(SttCard.copy(alpha = 0.7f))
             .border(1.dp, NeoBorderC, CircleShape)
+            .weightedSpring()
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -762,6 +773,7 @@ private fun ToneChip(label: String, icon: ImageVector, selected: Boolean, onClic
             .clip(RoundedCornerShape(50.dp))
             .background(if (selected) NeoPrimary else Color.White)
             .border(1.dp, if (selected) Color.Transparent else Color(0xFFE5E5E5), RoundedCornerShape(50.dp))
+            .weightedSpring()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -778,6 +790,7 @@ private fun LinkRow(icon: ImageVector, label: String, onClick: () -> Unit = {}) 
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
+            .weightedSpring()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -822,6 +835,7 @@ private fun SttPermissionsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
+                    .weightedSpring()
                     .clickable { expanded = !expanded }
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -899,6 +913,7 @@ private fun SttPermissionRow(title: String, granted: Boolean, onRequest: () -> U
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .weightedSpring()
             .clickable { onRequest() }
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

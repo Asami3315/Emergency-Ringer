@@ -42,9 +42,12 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import com.emergencyringer.app.EmergencyContactRepository
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -421,7 +424,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun GlassNavItem(
+private fun RowScope.GlassNavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     selected: Boolean,
@@ -435,10 +438,11 @@ private fun GlassNavItem(
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .weight(1f)
+            .weightedSpring()
             .clickable(
-                indication = null,
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
             ) { onClick() }
             .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
