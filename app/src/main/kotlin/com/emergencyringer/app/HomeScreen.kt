@@ -225,71 +225,45 @@ private fun HeroStatusCard(
                 .padding(24.dp)
         ) {
             Column {
+                // Active pill
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50.dp))
+                        .background(Color.White.copy(alpha = 0.7f))
+                        .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50.dp))
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column {
-                        // Active pill
-                        Row(
+                    Box(modifier = Modifier.size(8.dp)) {
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(50.dp))
-                                .background(Color.White.copy(alpha = 0.7f))
-                                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50.dp))
-                                .padding(horizontal = 12.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(modifier = Modifier.size(8.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            if (isActive && monitoringEnabled) NeoYellow.copy(alpha = pulseAlpha)
-                                            else Color.Gray.copy(alpha = 0.3f),
-                                            CircleShape
-                                        )
+                                .fillMaxSize()
+                                .background(
+                                    if (isActive && monitoringEnabled) NeoYellow.copy(alpha = pulseAlpha)
+                                    else Color.Gray.copy(alpha = 0.3f),
+                                    CircleShape
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .align(Alignment.Center)
-                                        .background(
-                                            if (isActive && monitoringEnabled) NeoYellow else Color.Gray,
-                                            CircleShape
-                                        )
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            if (isActive && monitoringEnabled) "Active" else "Sleeping",
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = NeoText,
-                            lineHeight = 32.sp
                         )
-                    }
-
-                    // Shield icon box
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .background(
-                                Brush.linearGradient(listOf(NeoYellow, Color(0xFFFFD569))),
-                                RoundedCornerShape(24.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            if (isActive && monitoringEnabled) Icons.Default.Security else Icons.Default.SecurityUpdateWarning,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .align(Alignment.Center)
+                                .background(
+                                    if (isActive && monitoringEnabled) NeoYellow else Color.Gray,
+                                    CircleShape
+                                )
                         )
                     }
                 }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    if (isActive && monitoringEnabled) "Active" else "Sleeping",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = NeoText,
+                    lineHeight = 32.sp
+                )
 
 
 
