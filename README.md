@@ -94,15 +94,12 @@ A premium 5-bar volume visualizer lets you set the exact alarm intensity from 40
 
 <div align="center">
 
-> **Add your screenshots here!**
-> 
-> Place your app screenshots in a `/screenshots` folder and update the paths below.
 
-<!--
-| Home Dashboard | Settings | History |
+| | | |
 |:-:|:-:|:-:|
-| ![Home](screenshots/home.png) | ![Settings](screenshots/settings.png) | ![History](screenshots/history.png) |
--->
+| <img src="screenshots/351shots_so.png" width="250"/> | <img src="screenshots/37shots_so.png" width="250"/> | <img src="screenshots/561shots_so.png" width="250"/> |
+| <img src="screenshots/581shots_so.png" width="250"/> | <img src="screenshots/588shots_so.png" width="250"/> | <img src="screenshots/797shots_so.png" width="250"/> |
+| <img src="screenshots/836shots_so.png" width="250"/> | | |
 
 </div>
 

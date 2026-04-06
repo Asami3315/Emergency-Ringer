@@ -12,6 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,12 +55,12 @@ private val BadgeKTxt = Color(0xFF6B7280)
 private val BadgeMBg  = Color(0x80D1FAE5)
 private val BadgeMTxt = Color(0xFF065F46)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen() {
     val context = LocalContext.current
     var history by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory(context)) }
     var showClearDialog by remember { mutableStateOf(false) }
-    var showDebugLog by remember { mutableStateOf(false) }
     val logMessages by AppLog.messages.collectAsState()
 
     // Refresh AppLog from file (in case service wrote logs while app was closed)
@@ -113,84 +116,82 @@ fun HistoryScreen() {
                 .background(Brush.verticalGradient(listOf(Color(0xFFFDFBF7).copy(alpha = 0.9f), Color.Transparent)))
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+        LazyColumn(
+            modifier = Modifier.fillMaxSize()
         ) {
-
-            // ── Header ────────────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 52.dp, bottom = 16.dp)
-            ) {
-                Text(
-                    "History Log",
-                    modifier = Modifier.align(Alignment.Center),
-                    fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-                    color = WText, letterSpacing = (-0.3).sp
-                )
+            item {
+                // ── Header ────────────────────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 52.dp, bottom = 16.dp)
+                ) {
+                    Text(
+                        "Activity",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraLight,
+                        color = WText
+                    )
+                }
             }
 
             if (history.isEmpty()) {
                 // Empty state
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(320.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(WAccent.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Icon(Icons.Default.History, null, tint = WAccent, modifier = Modifier.size(40.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .background(WAccent.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.History, null, tint = WAccent, modifier = Modifier.size(40.dp))
+                            }
+                            Text("No triggers yet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = WText)
+                            Text(
+                                "When an emergency alarm fires,\nit will appear here.",
+                                fontSize = 14.sp, color = WMuted,
+                                textAlign = TextAlign.Center, lineHeight = 20.sp
+                            )
                         }
-                        Text("No triggers yet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = WText)
-                        Text(
-                            "When an emergency alarm fires,\nit will appear here.",
-                            fontSize = 14.sp, color = WMuted,
-                            textAlign = TextAlign.Center, lineHeight = 20.sp
-                        )
                     }
                 }
             } else {
-                // Scrollable list
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 16.dp)
-                ) {
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                    val today = sdf.format(Date())
-                    val yesterday = sdf.format(Date(System.currentTimeMillis() - 86_400_000L))
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val today = sdf.format(Date())
+                val yesterday = sdf.format(Date(System.currentTimeMillis() - 86_400_000L))
 
-                    val grouped = history
-                        .groupBy { sdf.format(Date(it.timestampMs)) }
-                        .entries
-                        .sortedByDescending { it.key }
+                val grouped = history
+                    .groupBy { sdf.format(Date(it.timestampMs)) }
+                    .entries
+                    .sortedByDescending { it.key }
 
-                    grouped.forEachIndexed { groupIdx, (dateKey, records) ->
-                        val dateLabel = when (dateKey) {
-                            today     -> "Today"
-                            yesterday -> "Yesterday"
-                            else      -> SimpleDateFormat("d MMM yyyy", Locale.getDefault())
-                                            .format(sdf.parse(dateKey) ?: Date())
-                        }
+                grouped.forEachIndexed { groupIdx, (dateKey, records) ->
+                    val dateLabel = when (dateKey) {
+                        today     -> "Today"
+                        yesterday -> "Yesterday"
+                        else      -> SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+                                        .format(sdf.parse(dateKey) ?: Date())
+                    }
 
+                    stickyHeader {
                         // ── Date separator ─────────────────────────
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
+                                .height(IntrinsicSize.Min)
+                                .background(Color.White.copy(alpha = 0.0f)) // transparent background to allow stickiness to glide visually
+                                .padding(start = 20.dp, end = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(
@@ -231,112 +232,128 @@ fun HistoryScreen() {
                             Text(
                                 dateLabel.uppercase(Locale.getDefault()),
                                 modifier = Modifier.padding(top = if (groupIdx == 0) 4.dp else 22.dp, bottom = 14.dp),
-                                fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp, color = WMuted
+                                fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.5.sp, color = WText
                             )
                         }
+                    }
 
-                        // ── Event rows ─────────────────────────────
-                        records.forEachIndexed { recIdx, record ->
-                            val isLast = groupIdx == grouped.lastIndex &&
-                                         recIdx == records.lastIndex
-                            // KEY FIX: IntrinsicSize.Min makes the Row height = card height,
-                            // so the icon column can use fillMaxHeight() to draw the line perfectly
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Min),   // <-- makes line fill card height
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                // ── Icon + connecting line column ───
-                                 Column(
-                                     modifier = Modifier
-                                         .width(38.dp)
-                                         .fillMaxHeight(),
-                                     horizontalAlignment = Alignment.CenterHorizontally
-                                 ) {
-                                     val style = resolveStyle(record.reason)
-                                     // Top bridge line: connects from bottom of previous card's gap
-                                     // down to this icon (only for non-first items)
-                                     if (recIdx > 0 || groupIdx > 0) {
-                                         Box(
-                                             modifier = Modifier
-                                                 .height(20.dp)   // matches card bottom padding
-                                                 .width(2.dp)
-                                                 .background(
-                                                     Brush.verticalGradient(
-                                                         listOf(WLine, WAccent.copy(0.4f))
-                                                     )
-                                                 )
-                                         )
-                                     } else {
-                                         Spacer(Modifier.height(8.dp))
-                                     }
-                                     // White ring + icon circle
+                    // ── Event rows ─────────────────────────────
+                    itemsIndexed(records) { recIdx, record ->
+                        val isLast = groupIdx == grouped.lastIndex && recIdx == records.lastIndex
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min)
+                                .padding(start = 20.dp, end = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            // ── Icon + connecting line column ───
+                             Column(
+                                 modifier = Modifier
+                                     .width(38.dp)
+                                     .fillMaxHeight(),
+                                 horizontalAlignment = Alignment.CenterHorizontally
+                             ) {
+                                 val style = resolveStyle(record.reason)
+                                 
+                                 // Top bridge line
+                                 if (recIdx > 0 || groupIdx > 0) {
                                      Box(
                                          modifier = Modifier
-                                             .size(38.dp)
-                                             .background(Color(0xFFF7F4EF), CircleShape),
+                                             .height(20.dp)
+                                             .width(2.dp)
+                                             .background(
+                                                 Brush.verticalGradient(
+                                                     listOf(WLine, WAccent.copy(0.4f))
+                                                 )
+                                             )
+                                     )
+                                 } else {
+                                     Spacer(Modifier.height(8.dp))
+                                 }
+                                 
+                                 // White ring + icon circle
+                                 Box(
+                                     modifier = Modifier
+                                         .size(38.dp)
+                                         .background(Color(0xFFF7F4EF), CircleShape),
+                                     contentAlignment = Alignment.Center
+                                 ) {
+                                     Box(
+                                         modifier = Modifier
+                                             .size(32.dp)
+                                         .background(style.iconBg, CircleShape),
                                          contentAlignment = Alignment.Center
                                      ) {
-                                         Box(
-                                             modifier = Modifier
-                                                 .size(32.dp)
-                                                 .background(style.iconBg, CircleShape),
-                                             contentAlignment = Alignment.Center
-                                         ) {
-                                             Icon(style.icon, null, tint = style.iconTint,
-                                                 modifier = Modifier.size(16.dp))
-                                         }
-                                     }
-                                     // Main connecting line below icon
-                                     if (!isLast) {
-                                         Box(
-                                             modifier = Modifier
-                                                 .weight(1f)
-                                                 .width(2.dp)
-                                                 .background(
-                                                     Brush.verticalGradient(
-                                                         listOf(WAccent.copy(0.5f), WLine)
-                                                     )
-                                                 )
-                                         )
+                                         Icon(style.icon, null, tint = style.iconTint,
+                                             modifier = Modifier.size(16.dp))
                                      }
                                  }
+                                 
+                                 // Main connecting line below icon
+                                 if (!isLast) {
+                                     Box(
+                                         modifier = Modifier
+                                             .weight(1f)
+                                             .width(2.dp)
+                                             .background(
+                                                 Brush.verticalGradient(
+                                                     listOf(WAccent.copy(0.5f), WLine)
+                                                 )
+                                             )
+                                     )
+                                 }
+                             }
 
-                                // ── Card ────────────────────────────
-                                val style = resolveStyle(record.reason)
-                                val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                                    .format(Date(record.timestampMs))
+                            // ── Card ────────────────────────────
+                            val style = resolveStyle(record.reason)
+                            val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                                .format(Date(record.timestampMs))
 
-                                 Card(
-                                     modifier = Modifier
-                                         .weight(1f)
-                                         .weightedSpring()
-                                         .padding(bottom = 20.dp),
-                                     shape = RoundedCornerShape(20.dp),
-                                     colors = CardDefaults.cardColors(containerColor = Color(0xA6FFFFFF)),
-                                     elevation = CardDefaults.cardElevation(0.dp)
-                                 ) {
-                                      Column(modifier = Modifier.padding(horizontal = 18.dp).padding(top = 14.dp, bottom = 14.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                record.callerName, fontSize = 17.sp,
-                                                fontWeight = FontWeight.SemiBold, color = WText,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Text(timeStr, fontSize = 11.sp, color = WMuted,
-                                                fontWeight = FontWeight.Medium)
-                                        }
-                                        Spacer(Modifier.height(8.dp))
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
+                             Card(
+                                 modifier = Modifier
+                                     .weight(1f)
+                                     .weightedSpring()
+                                     .padding(bottom = 20.dp),
+                                 shape = RoundedCornerShape(20.dp),
+                                 colors = CardDefaults.cardColors(containerColor = Color(0xA6FFFFFF)),
+                                 elevation = CardDefaults.cardElevation(0.dp)
+                             ) {
+                                  Column(modifier = Modifier.padding(horizontal = 18.dp).padding(top = 14.dp, bottom = 14.dp)) {
+                                     Row(
+                                         modifier = Modifier.fillMaxWidth(),
+                                         horizontalArrangement = Arrangement.SpaceBetween,
+                                         verticalAlignment = Alignment.CenterVertically
+                                     ) {
+                                         Text(
+                                             record.callerName, fontSize = 17.sp,
+                                             fontWeight = FontWeight.SemiBold, color = WText
+                                         )
+                                         Text(
+                                             timeStr, fontSize = 11.sp, 
+                                             color = WMuted.copy(alpha = 0.6f),
+                                             fontWeight = FontWeight.Medium
+                                         )
+                                     }
+                                    Spacer(Modifier.height(8.dp))
+                                     Row(
+                                         modifier = Modifier.fillMaxWidth(),
+                                         horizontalArrangement = Arrangement.SpaceBetween,
+                                         verticalAlignment = Alignment.CenterVertically
+                                     ) {
+                                         val cleanReason = record.reason
+                                             .replace("Message from", "", ignoreCase = true)
+                                             .replace("Emergency", "", ignoreCase = true)
+                                             .replace("Contact", "", ignoreCase = true)
+                                             .replace("()", "", ignoreCase = true)
+                                             .trim()
+
+                                         Row(
+                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                             verticalAlignment = Alignment.CenterVertically,
+                                             modifier = Modifier.weight(1f)
+                                         ) {
                                             Box(
                                                 modifier = Modifier
                                                     .background(style.badgeBg, RoundedCornerShape(50.dp))
@@ -348,24 +365,30 @@ fun HistoryScreen() {
                                                     letterSpacing = 0.8.sp, color = style.badgeTxt
                                                 )
                                             }
-                                            Text(
-                                                record.reason, fontSize = 12.sp, color = WMuted,
-                                                maxLines = 1,
-                                                fontStyle = if (style.italic) FontStyle.Italic
-                                                            else FontStyle.Normal
-                                            )
-                                        }
-                                    }
+                                             if (cleanReason.isNotEmpty()) {
+                                                 Text(
+                                                     cleanReason, 
+                                                     fontSize = 12.sp, color = WMuted,
+                                                     maxLines = 1,
+                                                     fontStyle = if (style.italic) FontStyle.Italic
+                                                                 else FontStyle.Normal
+                                                 )
+                                             }
+                                         }
+                                     }
                                 }
                             }
                         }
                     }
+                }
 
-                    // ── Clear History at bottom of scroll ──────────
+                // ── Clear History at bottom of scroll ──────────
+                item {
                     Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
                             .height(56.dp)
                             .magneticAffinity(strength = 0.2f)
                             .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(28.dp))
@@ -376,9 +399,9 @@ fun HistoryScreen() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Clear History", fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold, color = BadgeRTxt)
+                            fontWeight = FontWeight.SemiBold, color = Color.Black)
                     }
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(120.dp))
                 }
             }
         }
@@ -393,7 +416,7 @@ private data class RowStyle(
 
 private fun resolveStyle(reason: String): RowStyle = when {
     reason.contains("Emergency Contact", ignoreCase = true) ->
-        RowStyle(WAccent, Color.White, Icons.Default.Favorite, BadgeCBg, BadgeCTxt, "CONTACT")
+        RowStyle(WAccent, Color.White, Icons.Default.Favorite, BadgeCBg, BadgeCTxt, "CALL")
     reason.contains("Repeated", ignoreCase = true) ->
         RowStyle(Color(0xFFFEF2F2), Color(0xFFF9A8A8), Icons.Default.CallMissed,
             BadgeRBg, BadgeRTxt, "REPEATED")

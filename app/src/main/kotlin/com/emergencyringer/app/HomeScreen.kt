@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -60,6 +61,7 @@ fun HomeScreen(
     onRequestNotification: () -> Unit,
     onRequestDnd: () -> Unit,
     onRequestBattery: () -> Unit,
+    onRemoveContact: (String, String) -> Unit,
 ) {
     val allPermsReady = hasNotificationAccess && hasDndAccess
 
@@ -98,26 +100,25 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // ── Header (scrolls with content) ─────────────
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 48.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             "KinLink",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = NeoText,
-                            letterSpacing = (-0.5).sp
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.ExtraLight,
+                            color = NeoText
                         )
                         Text(
-                            if (allPermsReady) "All systems guarded" else "Setup required",
-                            fontSize = 13.sp,
-                            color = NeoMuted,
-                            fontWeight = FontWeight.Medium
+                            "Stay connected with your loved ones",
+                            fontSize = 12.sp,
+                            color = NeoText.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
@@ -126,7 +127,8 @@ fun HomeScreen(
                 HeroStatusCard(
                     isActive = allPermsReady,
                     monitoringEnabled = monitoringEnabled,
-                    onToggle = onMonitoringToggle
+                    onToggle = onMonitoringToggle,
+                    activeGuards = contacts.size
                 )
 
 
@@ -160,7 +162,7 @@ fun HomeScreen(
                         val items: List<EmergencyContactRepository.Contact?> = contacts + listOf(null)
                         items.chunked(2).forEach { row ->
                             Row(
-                                modifier = Modifier.height(IntrinsicSize.Max),
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 row.forEachIndexed { idx, contact ->
@@ -172,7 +174,8 @@ fun HomeScreen(
                                             ContactCard(
                                                 contact = contact,
                                                 accentColor = accentColors[globalIdx % accentColors.size],
-                                                iconTint = iconTints[globalIdx % iconTints.size]
+                                                iconTint = iconTints[globalIdx % iconTints.size],
+                                                onRemove = { onRemoveContact(contact.name, contact.number ?: "") }
                                             )
                                         }
                                     }
@@ -192,7 +195,8 @@ fun HomeScreen(
 private fun HeroStatusCard(
     isActive: Boolean,
     monitoringEnabled: Boolean,
-    onToggle: (Boolean) -> Unit
+    onToggle: (Boolean) -> Unit,
+    activeGuards: Int
 ) {
     val pulse = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulse.animateFloat(
@@ -205,10 +209,10 @@ private fun HeroStatusCard(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 20.dp,
+                elevation = 32.dp,
                 shape = RoundedCornerShape(32.dp),
-                ambientColor = Color.Black.copy(alpha = 0.08f),
-                spotColor = Color.Black.copy(alpha = 0.05f)
+                ambientColor = Color.Black.copy(alpha = 0.1f),
+                spotColor = Color.Black.copy(alpha = 0.15f)
             ),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -224,45 +228,39 @@ private fun HeroStatusCard(
                 .border(1.dp, Color.White, RoundedCornerShape(32.dp))
                 .padding(24.dp)
         ) {
-            Column {
-                // Active pill
-                Row(
+            // Yellow dot at top-left
+            Box(modifier = Modifier.size(10.dp).align(Alignment.TopStart)) {
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(50.dp))
-                        .background(Color.White.copy(alpha = 0.7f))
-                        .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50.dp))
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(modifier = Modifier.size(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    if (isActive && monitoringEnabled) NeoYellow.copy(alpha = pulseAlpha)
-                                    else Color.Gray.copy(alpha = 0.3f),
-                                    CircleShape
-                                )
+                        .fillMaxSize()
+                        .background(
+                            if (isActive && monitoringEnabled) NeoYellow.copy(alpha = pulseAlpha)
+                            else Color.Gray.copy(alpha = 0.3f),
+                            CircleShape
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(5.dp)
-                                .align(Alignment.Center)
-                                .background(
-                                    if (isActive && monitoringEnabled) NeoYellow else Color.Gray,
-                                    CircleShape
-                                )
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .align(Alignment.Center)
+                        .background(
+                            if (isActive && monitoringEnabled) NeoYellow else Color.Gray,
+                            CircleShape
                         )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
+                )
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    if (isActive && monitoringEnabled) "Active" else "Sleeping",
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = NeoText,
-                    lineHeight = 32.sp
+                    if (isActive && monitoringEnabled) "Active" else "Paused",
+                    fontSize = 32.sp,
+                    fontWeight = if (isActive && monitoringEnabled) FontWeight.Bold else FontWeight.Thin,
+                    color = if (isActive && monitoringEnabled) NeoText else Color.Black.copy(alpha = 0.38f),
+                    lineHeight = 34.sp
                 )
 
 
@@ -281,11 +279,11 @@ private fun HeroStatusCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Live Shield",
+                        if (monitoringEnabled) "Monitoring Alerts" else "Monitoring Off",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = if (monitoringEnabled) FontWeight.SemiBold else FontWeight.Thin,
                         letterSpacing = 1.sp,
-                        color = NeoText
+                        color = if (monitoringEnabled) NeoText else Color.Black.copy(alpha = 0.38f)
                     )
                     Switch(
                         checked = monitoringEnabled,
@@ -303,64 +301,111 @@ private fun HeroStatusCard(
 }
 
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ContactCard(contact: EmergencyContactRepository.Contact, accentColor: Color, iconTint: Color) {
+private fun ContactCard(
+    contact: EmergencyContactRepository.Contact,
+    accentColor: Color,
+    iconTint: Color,
+    onRemove: () -> Unit
+) {
     val initial = (contact.name.firstOrNull()?.uppercaseChar() ?: '?').toString()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .defaultMinSize(minHeight = 180.dp)
-            .magneticAffinity(strength = 0.12f),
+            .height(210.dp)
+            .magneticAffinity(strength = 0.12f)
+            .combinedClickable(
+                onLongClick = { showDeleteConfirm = true },
+                onClick = { if (showDeleteConfirm) showDeleteConfirm = false }
+            ),
         shape = RoundedCornerShape(32.dp),
         colors = CardDefaults.cardColors(containerColor = accentColor),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Top: call icon
-            Box(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.6f), CircleShape),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(Icons.Default.Call, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.height(16.dp))
-            // Bottom: avatar + name
-            Column {
+                // Top: call icon
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(16.dp)),
+                        .size(40.dp)
+                        .background(Color.White.copy(alpha = 0.6f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(initial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = iconTint)
+                    Icon(Icons.Default.Call, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    contact.name,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NeoText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!contact.number.isNullOrBlank()) {
+                Spacer(Modifier.height(16.dp))
+                // Bottom: avatar + name
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(initial, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = iconTint)
+                    }
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        contact.number,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = iconTint.copy(alpha = 0.7f),
-                        letterSpacing = 0.5.sp,
+                        contact.name,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeoText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (!contact.number.isNullOrBlank()) {
+                        Text(
+                            contact.number!!,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = iconTint.copy(alpha = 0.7f),
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Overlay for Delete
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showDeleteConfirm,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(Color(0xFFE53E3E), CircleShape)
+                                .clickable {
+                                    showDeleteConfirm = false
+                                    onRemove()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.White)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("Tap to remove", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
@@ -376,8 +421,7 @@ private fun AddContactCard(onAddContact: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight()
-            .defaultMinSize(minHeight = 180.dp)
+            .height(210.dp)
             .magneticAffinity(strength = 0.15f)
             .drawBehind {
                 val strokeWidth = 2.dp.toPx()

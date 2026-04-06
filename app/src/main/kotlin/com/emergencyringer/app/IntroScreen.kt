@@ -70,8 +70,8 @@ private val pages = listOf(
         accentColor = Screen1Accent,
         gradTop = Screen1GradTop,
         gradBottom = Screen1GradBottom,
-        title = "Never Miss an Emergency",
-        description = "Emergency Ringer ensures critical calls from your trusted contacts always ring loud — even when your phone is on silent or Do Not Disturb.",
+        title = "Never Miss What Matters",
+        description = "KinLink ensures critical calls from your Inner Circle always ring through even when your phone is on silent or Do Not Disturb.",
         imageSize = 0.95f
     ),
     IntroPage(
@@ -79,16 +79,16 @@ private val pages = listOf(
         accentColor = Screen2Accent,
         gradTop = Screen2GradTop,
         gradBottom = Screen2GradBottom,
-        title = "Your Circle, Protected",
-        description = "Add your emergency contacts — family, doctors, close friends — and customize ringtone, volume, and alerts. Stay connected when it truly matters."
+        title = "Your Circle, Prioritized",
+        description = "Choose exactly who can reach you anytime. Whether it is family, doctors, or close friends, stay connected when it truly matters."
     ),
     IntroPage(
         drawableRes = R.drawable.intro_always_guard,
         accentColor = Screen3Accent,
         gradTop = Screen3GradTop,
         gradBottom = Screen3GradBottom,
-        title = "Always on Guard",
-        description = "Emergency Ringer runs quietly in the background. Simply grant silent-mode access, and we’ll handle the rest — keeping you safe 24/7 without draining your battery.",
+        title = "Always Guarded, Zero Drain",
+        description = "KinLink runs intelligently in the background with elite battery optimization. Safe, private, and always ready without affecting your phone’s performance.",
         imageSize = 0.90f
     )
 )
@@ -186,8 +186,8 @@ fun IntroScreen(onComplete: () -> Unit) {
                 )
             }
 
-            // "Skip for now" on last screen
-            AnimatedVisibility(visible = isLastScreen) {
+            // "Skip" on first 2 screens
+            AnimatedVisibility(visible = !isLastScreen) {
                 TextButton(
                     onClick = onComplete,
                     modifier = Modifier
@@ -195,7 +195,7 @@ fun IntroScreen(onComplete: () -> Unit) {
                         .padding(top = 8.dp)
                 ) {
                     Text(
-                        "Skip for now",
+                        "Skip",
                         fontSize = 14.sp,
                         color = IntroMuted,
                         fontWeight = FontWeight.Medium

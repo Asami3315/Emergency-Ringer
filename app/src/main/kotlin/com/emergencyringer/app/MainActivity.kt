@@ -282,6 +282,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Custom Web Font: Plus Jakarta Sans
+val PlusJakartaSans = androidx.compose.ui.text.font.FontFamily.SansSerif
+
 @Composable
 fun EmergencyRingerTheme(content: @Composable () -> Unit) {
     MaterialTheme(
@@ -296,11 +299,11 @@ fun EmergencyRingerTheme(content: @Composable () -> Unit) {
             onSurface          = Color(0xFF1A1A1A)
         ),
         typography = Typography(
-            displayLarge  = TextStyle(fontSize = 57.sp, fontWeight = FontWeight.Bold),
-            headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
-            titleLarge    = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-            bodyLarge     = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal),
-            labelLarge    = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            displayLarge  = TextStyle(fontFamily = PlusJakartaSans, fontSize = 57.sp, fontWeight = FontWeight.Bold),
+            headlineLarge = TextStyle(fontFamily = PlusJakartaSans, fontSize = 32.sp, fontWeight = FontWeight.Bold),
+            titleLarge    = TextStyle(fontFamily = PlusJakartaSans, fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+            bodyLarge     = TextStyle(fontFamily = PlusJakartaSans, fontSize = 16.sp, fontWeight = FontWeight.Normal),
+            labelLarge    = TextStyle(fontFamily = PlusJakartaSans, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         ),
         content = content
     )
@@ -375,7 +378,8 @@ fun MainScreen(
                 onAddContact              = onAddContact,
                 onRequestNotification     = onRequestNotificationAccess,
                 onRequestDnd              = onRequestDndAccess,
-                onRequestBattery          = onRequestBatteryOptimization
+                onRequestBattery          = onRequestBatteryOptimization,
+                onRemoveContact           = onRemoveContact
             )
             1 -> HistoryScreen()
             2 -> SettingsScreen(
@@ -385,6 +389,13 @@ fun MainScreen(
                 onStopRinger        = onStopRinger,
                 vibrantPurple       = Color(0xFFFFB703),
                 deepPurple          = Color(0xFFE6A200),
+                monitoringEnabled   = monitoringEnabled,
+                allPermsReady       = permNotification && permDnd && permContacts && permBattery,
+                onMonitoringToggle  = { enabled ->
+                    monitoringEnabled = enabled
+                    EmergencyContactRepository.setMonitoringEnabled(context, enabled)
+                    AppLog.log(if (enabled) "✅ Monitoring enabled" else "⏸️ Monitoring paused", context)
+                },
                 hasNotificationAccess = permNotification,
                 isBatteryOptDisabled  = permBattery,
                 onRequestNotification = onRequestNotificationAccess,
@@ -416,7 +427,7 @@ fun MainScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 GlassNavItem(icon = Icons.Default.Home, label = "Home",     selected = currentTab == 0) { currentTab = 0 }
-                GlassNavItem(icon = Icons.Default.History,  label = "History",  selected = currentTab == 1) { currentTab = 1 }
+                GlassNavItem(icon = Icons.Default.NotificationsActive,  label = "Activity",  selected = currentTab == 1) { currentTab = 1 }
                 GlassNavItem(icon = Icons.Default.Settings, label = "Settings", selected = currentTab == 2) { currentTab = 2 }
             }
         }

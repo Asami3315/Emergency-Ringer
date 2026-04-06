@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
 import com.emergencyringer.app.BuildConfig
 
 private val NeoBg      = Color(0xFFFFFDF8)   // ultra-clean cream from HTML
@@ -46,6 +48,9 @@ fun SettingsScreen(
     onStopRinger: () -> Unit,
     vibrantPurple: Color,
     deepPurple: Color,
+    monitoringEnabled: Boolean,
+    allPermsReady: Boolean,
+    onMonitoringToggle: (Boolean) -> Unit,
     hasNotificationAccess: Boolean = false,
     isBatteryOptDisabled: Boolean = false,
     onRequestNotification: () -> Unit = {},
@@ -110,35 +115,37 @@ fun SettingsScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // ── Header ───────────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 52.dp, bottom = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "SYSTEM CONTROL",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NeoTextC.copy(alpha = 0.8f),
-                    letterSpacing = 0.5.sp
-                )
-            }
-
             // ── Scrollable content ────────────────────────────
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 120.dp),  // extra space for floating nav bar
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                    .padding(bottom = 120.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // ── Header (Inside scrollable) ───────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 52.dp, bottom = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Settings",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraLight,
+                        color = NeoTextC,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
 
-                // ── Shield Status Card (gradient border) ──────
-                ShieldStatusCard()
+                // ── Status Ring Hero ──────────────────────────
+                ShieldStatusCard(
+                    allPermsReady = allPermsReady,
+                    monitoringEnabled = monitoringEnabled,
+                    onToggle = onMonitoringToggle
+                )
 
                 // ── Message Alerts ────────────────────────────
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
@@ -196,61 +203,82 @@ fun SettingsScreen(
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         Text(
-                            "ALARM CONFIGURATION",
+                            "ALERT BEHAVIOR",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = NeoMutedC,
-                            letterSpacing = 1.5.sp
+                            color = NeoMutedC.copy(alpha = 0.7f),
+                            letterSpacing = 2.sp
                         )
 
                         // Auto-stop
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.Start,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Auto-stop", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Text("Ring Duration", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Spacer(Modifier.width(12.dp))
                                 Box(
                                     modifier = Modifier
                                         .background(Color(0xFFF8F8F8), RoundedCornerShape(20.dp))
                                         .padding(horizontal = 12.dp, vertical = 5.dp)
                                 ) {
-                                    Text("Silence timer", fontSize = 11.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
+                                    Text("Auto-silence after", fontSize = 11.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
                                 }
                             }
                             // Pill button row
-                            Row(
+                            BoxWithConstraints(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(Color(0xFFF5F5F5), RoundedCornerShape(22.dp))
-                                    .padding(6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    .padding(6.dp)
                             ) {
-                                listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L).forEach { (label, ms) ->
-                                    val selected = autoStopDuration == ms
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(if (selected) NeoPrimary else Color.Transparent)
-                                            .weightedSpring()
-                                            .clickable(
-                                                indication = null,
-                                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                            ) {
-                                                autoStopDuration = ms
-                                                EmergencyContactRepository.setAutoStopDuration(context, ms)
-                                            }
-                                            .padding(vertical = 12.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            label,
-                                            fontSize = 14.sp,
-                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            color = if (selected) Color.White else NeoTextC
-                                        )
+                                val options = listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L)
+                                val selectedIndex = options.indexOfFirst { it.second == autoStopDuration }.coerceAtLeast(0)
+                                val segmentWidth = maxWidth / options.size
+                                
+                                val animatedOffset by androidx.compose.animation.core.animateDpAsState(
+                                    targetValue = segmentWidth * selectedIndex,
+                                    animationSpec = androidx.compose.animation.core.spring(
+                                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                        stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                                    ), label = "pillSlide"
+                                )
+
+                                // Background sliding thumb
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = animatedOffset)
+                                        .width(segmentWidth)
+                                        .height(44.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(NeoPrimary)
+                                )
+
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    options.forEach { (label, ms) ->
+                                        val isSelected = autoStopDuration == ms
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(44.dp)
+                                                .clickable(
+                                                    indication = null,
+                                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                                ) {
+                                                    autoStopDuration = ms
+                                                    EmergencyContactRepository.setAutoStopDuration(context, ms)
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                label,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (isSelected) Color.White else NeoTextC
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -271,7 +299,7 @@ fun SettingsScreen(
                         // Vibrate toggle
                         NeoToggleRow(
                             icon = Icons.Default.Vibration,
-                            label = "Haptic Pattern",
+                            label = "Tactile Vibration",
                             checked = vibrateEnabled,
                             onCheckedChange = {
                                 vibrateEnabled = it
@@ -282,7 +310,7 @@ fun SettingsScreen(
                         // Flashlight toggle
                         NeoToggleRow(
                             icon = Icons.Default.FlashlightOn,
-                            label = "Strobe Light",
+                            label = "Visual Flash Alert",
                             checked = flashEnabled,
                             onCheckedChange = {
                                 flashEnabled = it
@@ -304,11 +332,11 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "AUDIO OUTPUT",
+                                "SOUND",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = NeoMutedC,
-                                letterSpacing = 1.5.sp
+                                color = NeoMutedC.copy(alpha = 0.7f),
+                                letterSpacing = 2.sp
                             )
                             // Mute toggle icon
                             val isMuted = selectedVolume == 0
@@ -343,55 +371,6 @@ fun SettingsScreen(
                         val activeIndex = if (selectedVolume == 0) -1 else volumeLevels.indexOfFirst { it >= selectedVolume }.let { if (it == -1) 4 else it }
 
                         Column {
-                            // Volume % + MAX LOUD row
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Bottom
-                            ) {
-                                Column {
-                                    Text(
-                                        "${if (activeIndex == -1) 0 else volumeLevels[activeIndex]}%",
-                                        fontSize = 44.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NeoTextC,
-                                        letterSpacing = (-2).sp
-                                    )
-                                    Text(
-                                        "Current Level",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = NeoMutedC
-                                    )
-                                }
-                                if (activeIndex == -1) {
-                                    Text(
-                                        "MUTED",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = NeoMutedC,
-                                        letterSpacing = 1.sp,
-                                        modifier = Modifier
-                                            .background(Color(0xFFF3F4F6), RoundedCornerShape(50.dp))
-                                            .padding(horizontal = 14.dp, vertical = 7.dp)
-                                    )
-                                } else if (activeIndex >= 0 && volumeLevels[activeIndex] >= 90) {
-                                    Text(
-                                        "MAX LOUD",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = NeoPrimary,
-                                        letterSpacing = 1.sp,
-                                        modifier = Modifier
-                                            .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
-                                            .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
-                                            .padding(horizontal = 14.dp, vertical = 7.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(24.dp))
-
                             // Interactive volume bars
                             val barFractions = listOf(0.40f, 0.60f, 0.75f, 0.90f, 1.00f)
                             Row(
@@ -399,6 +378,27 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 verticalAlignment = Alignment.Bottom
                             ) {
+                                // Frosted glass circle with %
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.CenterVertically)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(72.dp)
+                                            .background(Color.White.copy(alpha = 0.6f), CircleShape)
+                                            .border(1.dp, Color.White, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "${if (activeIndex == -1) 0 else volumeLevels[activeIndex]}%",
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeoTextC,
+                                            letterSpacing = (-1).sp
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Override Volume", fontSize = 9.sp, color = NeoMutedC, fontWeight = FontWeight.Bold)
+                                }
+
                                 barFractions.forEachIndexed { index, fraction ->
                                     val isActive = index == activeIndex
                                     Box(
@@ -424,26 +424,31 @@ fun SettingsScreen(
                                                     RoundedCornerShape(50.dp)
                                                 )
                                         )
-                                        // VOL label on the active bar
-                                        if (isActive) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .align(Alignment.TopCenter)
-                                                    .offset(y = (140 * (1f - fraction) - 40).dp)
-                                                    .background(NeoTextC, RoundedCornerShape(50.dp))
-                                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                                            ) {
-                                                Text("VOL", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                                            }
-                                        }
                                     }
                                 }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            if (activeIndex >= 0 && volumeLevels[activeIndex] >= 90) {
+                                Text(
+                                    "Max Intensity",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeoPrimary,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterHorizontally)
+                                        .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
+                                        .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
+                                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                                )
                             }
 
                             Spacer(Modifier.height(16.dp))
 
                             Text(
-                                "Tap bars to adjust override level",
+                                "Set your emergency volume level",
                                 fontSize = 12.sp,
                                 color = NeoMutedC,
                                 fontWeight = FontWeight.Medium,
@@ -459,22 +464,21 @@ fun SettingsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .shadow(8.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.06f))
-                                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
-                                .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                                .padding(18.dp),
+                                .padding(horizontal = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(modifier = Modifier.size(6.dp).background(NeoPrimary, CircleShape))
-                                Text("SYSTEM SETUP", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
+                                Text("PREFERENCES", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
                             }
 
                             // Currently selected option (tap to expand)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color.White, RoundedCornerShape(18.dp))
+                                    .shadow(4.dp, RoundedCornerShape(50.dp), spotColor = Color.Black.copy(0.04f))
+                                    .border(1.dp, Color.White.copy(alpha=0.6f), RoundedCornerShape(50.dp))
+                                    .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(50.dp))
                                     .clickable(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -483,15 +487,20 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
                                     Icon(
                                         if (isPhone) Icons.Default.PhoneAndroid else Icons.Default.MusicNote,
                                         contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(20.dp)
                                     )
-                                    Text(
-                                        if (isPhone) "System Ringtone" else "Custom Sound",
-                                        fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC
-                                    )
+                                    Column {
+                                        Text(
+                                            if (isPhone) "System Ringtone" else "Custom Sound",
+                                            fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC
+                                        )
+                                        if (!isPhone) {
+                                            Text(ringtoneName, fontSize = 12.sp, color = NeoPrimary, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
                                 }
                                 Icon(
                                     if (systemExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -504,7 +513,9 @@ fun SettingsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(Color.White, RoundedCornerShape(18.dp))
+                                        .shadow(4.dp, RoundedCornerShape(50.dp), spotColor = Color.Black.copy(0.04f))
+                                        .border(1.dp, Color.White.copy(alpha=0.6f), RoundedCornerShape(50.dp))
+                                        .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(50.dp))
                                         .clickable(
                                             indication = null,
                                             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -533,24 +544,9 @@ fun SettingsScreen(
                                 }
                             }
 
-                            // Custom sound details (shown only when Custom Sound selected)
-                            if (!isPhone) {
-                                // Selected ringtone name
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.White, RoundedCornerShape(18.dp))
-                                        .padding(horizontal = 18.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Selected", fontSize = 11.sp, color = NeoPrimary, fontWeight = FontWeight.Bold)
-                                        Text(ringtoneName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NeoTextC, maxLines = 1)
-                                    }
-                                }
 
-                                // Change + Preview buttons (stacked, full width like dropdown)
+                            // Change + Preview buttons (stacked, full width like dropdown)
+                            androidx.compose.animation.AnimatedVisibility(visible = !isPhone) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -581,7 +577,6 @@ fun SettingsScreen(
                                 }
                             }
                         }
-
                     }
                 }
 
@@ -593,22 +588,23 @@ fun SettingsScreen(
                         .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
                         .clip(RoundedCornerShape(28.dp)),
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        LinkRow(icon = Icons.Default.SupportAgent, label = "Support") {
+                    Column(
+                        modifier = Modifier.padding(16.dp), 
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        LinkRow(icon = Icons.Default.SupportAgent, label = "Help & Feedback") {
                             val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
                                 data = android.net.Uri.parse("mailto:nexustec.official@gmail.com")
                                 putExtra(android.content.Intent.EXTRA_SUBJECT, "Emergency Ringer Support")
                             }
                             try { context.startActivity(intent) } catch (_: Exception) {}
                         }
-                        Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                         LinkRow(icon = Icons.Default.Policy, label = "Privacy Policy") {
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
                                 android.net.Uri.parse("https://emergencyringer.com/privacy"))
                             try { context.startActivity(intent) } catch (_: Exception) {}
                         }
-                        Divider(color = Color(0xFFF5F5F5), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                        LinkRow(icon = Icons.Default.Share, label = "Share App") {
+                        LinkRow(icon = Icons.Default.Share, label = "Invite a Guardian") {
                             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(android.content.Intent.EXTRA_TEXT, "Check out Emergency Ringer - always reachable when it matters! https://play.google.com/store/apps/details?id=${context.packageName}")
@@ -618,38 +614,34 @@ fun SettingsScreen(
                     }
                 }
 
-                // ── TEST: Preview Intro Screen (temporary) ───
-                OutlinedButton(
-                    onClick = { showIntroPreview = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, NeoPrimary.copy(alpha = 0.3f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeoPrimary)
-                ) {
-                    Icon(Icons.Default.Visibility, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Preview Intro Screen", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
 
                 // ── Version footer ────────────────────────────
-                Column(
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "Version ${BuildConfig.VERSION_NAME}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NeoMutedC.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "NEXUS-TEC SHIELD",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = NeoMutedC.copy(alpha = 0.3f),
-                        letterSpacing = 3.sp
-                    )
+                    Column(
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "VERSION ${BuildConfig.VERSION_NAME}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeoTextC.copy(alpha = 0.7f),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "A NEXESTEC PRODUCT",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeoTextC.copy(alpha = 0.5f),
+                            letterSpacing = 1.5.sp
+                        )
+                    }
                 }
             }
         }
@@ -659,46 +651,134 @@ fun SettingsScreen(
 // ── Sub-components ────────────────────────────────────────────
 
 @Composable
-private fun ShieldStatusCard() {
-    Box(
+private fun ShieldStatusCard(
+    allPermsReady: Boolean,
+    monitoringEnabled: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    val isActive = allPermsReady && monitoringEnabled
+    val breath = rememberInfiniteTransition(label = "breath")
+
+    // Breathing scale for the icon
+    val breathScale by breath.animateFloat(
+        initialValue = 1f, targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ), label = "breathScale"
+    )
+
+    // Outer ring 1 — slow expanding radar
+    val ring1Scale by breath.animateFloat(
+        initialValue = 1f, targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, easing = LinearEasing), RepeatMode.Restart
+        ), label = "ring1"
+    )
+    val ring1Alpha by breath.animateFloat(
+        initialValue = 0.35f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, easing = LinearEasing), RepeatMode.Restart
+        ), label = "ring1a"
+    )
+
+    // Outer ring 2 — offset delayed ring
+    val ring2Scale by breath.animateFloat(
+        initialValue = 1f, targetValue = 1.45f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, delayMillis = 1500, easing = LinearEasing), RepeatMode.Restart
+        ), label = "ring2"
+    )
+    val ring2Alpha by breath.animateFloat(
+        initialValue = 0.25f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            tween(3000, delayMillis = 1500, easing = LinearEasing), RepeatMode.Restart
+        ), label = "ring2a"
+    )
+
+    // Glow halo
+    val glowAlpha by breath.animateFloat(
+        initialValue = 0.15f, targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse
+        ), label = "glow"
+    )
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(2.dp, Brush.linearGradient(listOf(Color(0xFFFFE5A0), Color(0xFFE0F2FE), Color(0xFFFFE5A0))), RoundedCornerShape(32.dp))
-            .background(SttCard, RoundedCornerShape(32.dp))
-            .padding(28.dp)
+            .padding(vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(bottom = 14.dp)
-                ) {
-                    Box(modifier = Modifier.size(10.dp)) {
-                        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF34D399).copy(alpha = 0.4f), CircleShape))
-                        Box(modifier = Modifier.size(6.dp).align(Alignment.Center).background(Color(0xFF10B981), CircleShape))
-                    }
-                    Text("SYSTEM ACTIVE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF059669), letterSpacing = 1.sp)
-                }
-                Text("Emergency\nShield", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = NeoTextC, lineHeight = 32.sp)
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Whitelisted contacts bypass Do Not Disturb. Monitoring active.",
-                    fontSize = 13.sp,
-                    color = NeoMutedC,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 18.sp
+        // ── Breathing Bell Icon ─────────────────────────────
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(200.dp)
+        ) {
+            // Expanding radar rings (only when active)
+            if (isActive) {
+                Box(
+                    Modifier
+                        .size(130.dp)
+                        .scale(ring1Scale)
+                        .border(2.dp, NeoPrimary.copy(alpha = ring1Alpha), CircleShape)
+                )
+                Box(
+                    Modifier
+                        .size(130.dp)
+                        .scale(ring2Scale)
+                        .border(1.5.dp, NeoPrimary.copy(alpha = ring2Alpha), CircleShape)
+                )
+                // Soft golden glow behind icon
+                Box(
+                    Modifier
+                        .size(140.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    NeoPrimary.copy(alpha = glowAlpha),
+                                    NeoPrimary.copy(alpha = glowAlpha * 0.3f),
+                                    Color.Transparent
+                                )
+                            ),
+                            CircleShape
+                        )
                 )
             }
+
+            // ── Tappable Icon Circle ────────────────────────
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(22.dp))
-                    .border(1.dp, NeoPrimary.copy(alpha = 0.2f), RoundedCornerShape(22.dp)),
+                    .size(110.dp)
+                    .scale(if (isActive) breathScale else 1f)
+                    .shadow(
+                        if (isActive) 24.dp else 8.dp,
+                        CircleShape,
+                        spotColor = if (isActive) NeoPrimary.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
+                    )
+                    .background(Color(0xFF1A1A1A), CircleShape)
+                    .border(
+                        2.dp,
+                        if (isActive) NeoPrimary.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.15f),
+                        CircleShape
+                    )
+                    .clip(CircleShape)
+                    .clickable { onToggle(!monitoringEnabled) },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Shield, contentDescription = null, tint = NeoPrimary, modifier = Modifier.size(36.dp))
+                // App launcher icon (golden bell-tree)
+                Image(
+                    painter = painterResource(id = R.mipmap.ic_launcher),
+                    contentDescription = if (isActive) "Tap to pause" else "Tap to activate",
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                    alpha = if (isActive) 1f else 0.4f
+                )
             }
+
+            // Small power indicator dot — removed per user request
         }
     }
 }
@@ -791,7 +871,11 @@ private fun LinkRow(icon: ImageVector, label: String, onClick: () -> Unit = {}) 
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .weightedSpring()
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -861,7 +945,7 @@ private fun SttPermissionsCard(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (readyCount == 2) {
-                        Text("✓ Ready", fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        Text("Ready", fontSize = 11.sp, fontWeight = FontWeight.Bold,
                             color = NeoPrimary, maxLines = 1,
                             modifier = Modifier
                                 .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
