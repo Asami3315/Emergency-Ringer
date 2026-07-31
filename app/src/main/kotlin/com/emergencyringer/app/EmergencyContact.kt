@@ -14,6 +14,15 @@ private const val KEY_CONTACTS = "whitelist"
  * Uses SharedPreferences for sync access (needed by NotificationService).
  */
 object EmergencyContactRepository {
+    private const val KEY_PREMIUM = "is_premium"
+
+    fun isPremium(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_PREMIUM, false)
+    }
+
+    fun setPremium(context: Context, isPremium: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PREMIUM, isPremium).apply()
+    }
 
     data class Contact(val name: String, val number: String) {
         val persistenceValue: String get() = "$name|$number"
@@ -39,31 +48,30 @@ object EmergencyContactRepository {
             SimpleDateFormat("hh:mm a, dd MMM", Locale.getDefault()).format(Date(timestampMs))
     }
 
-    /** Number of calls from same unknown number to trigger repeated-caller alarm. */
-    const val REPEATED_CALL_THRESHOLD = 3
-    /** Time window for repeated-caller detection (1 hour). */
-    private const val REPEATED_CALL_WINDOW_MS = 60 * 60 * 1000L
+
 
     /** In-memory call timestamps per caller key (resets on service restart). */
     private val recentCallTimestamps: MutableMap<String, MutableList<Long>> = mutableMapOf()
 
     /**
      * Record an incoming call from [callerKey].
-     * Prunes calls older than 1 hour, then returns current count within window.
+     * Prunes calls older than the configured window, then returns current count within window.
      */
-    fun recordIncomingCall(callerKey: String): Int {
+    fun recordIncomingCall(context: Context, callerKey: String): Int {
         val now = System.currentTimeMillis()
+        val windowMs = getRepeatedCallWindowMs(context)
         val timestamps = recentCallTimestamps.getOrPut(callerKey) { mutableListOf() }
-        timestamps.removeAll { now - it > REPEATED_CALL_WINDOW_MS }
+        timestamps.removeAll { now - it > windowMs }
         timestamps.add(now)
         return timestamps.size
     }
 
-    /** Returns how many times [callerKey] has called within the last hour. */
-    fun getRecentCallCount(callerKey: String): Int {
+    /** Returns how many times [callerKey] has called within the configured window. */
+    fun getRecentCallCount(context: Context, callerKey: String): Int {
         val now = System.currentTimeMillis()
+        val windowMs = getRepeatedCallWindowMs(context)
         return recentCallTimestamps[callerKey]
-            ?.count { now - it <= REPEATED_CALL_WINDOW_MS } ?: 0
+            ?.count { now - it <= windowMs } ?: 0
     }
 
     /** Trigger history shown in Recent Triggers UI (max 50 entries, persisted). */
@@ -308,5 +316,100 @@ object EmergencyContactRepository {
     
     fun getDarkMode(context: Context): String {
         return getPrefs(context).getString(KEY_DARK_MODE, DARK_MODE_SYSTEM) ?: DARK_MODE_SYSTEM
+    }
+
+    // ═══════════════════════════════════════
+    // NEW ADVANCED SETTINGS
+    // ═══════════════════════════════════════
+
+    // Repeated call threshold settings
+    private const val KEY_REPEATED_CALL_THRESHOLD = "repeated_call_threshold"
+    private const val KEY_REPEATED_CALL_WINDOW_MINS = "repeated_call_window_mins"
+    
+    fun setRepeatedCallThreshold(context: Context, threshold: Int) {
+        getPrefs(context).edit().putInt(KEY_REPEATED_CALL_THRESHOLD, threshold).apply()
+    }
+    fun getRepeatedCallThreshold(context: Context): Int {
+        return getPrefs(context).getInt(KEY_REPEATED_CALL_THRESHOLD, 3)
+    }
+    fun setRepeatedCallWindowMins(context: Context, mins: Int) {
+        getPrefs(context).edit().putInt(KEY_REPEATED_CALL_WINDOW_MINS, mins).apply()
+    }
+    fun getRepeatedCallWindowMins(context: Context): Int {
+        return getPrefs(context).getInt(KEY_REPEATED_CALL_WINDOW_MINS, 60)
+    }
+    fun getRepeatedCallWindowMs(context: Context): Long {
+        return getRepeatedCallWindowMins(context) * 60 * 1000L
+    }
+
+    // Escalating Volume
+    private const val KEY_ESCALATING_ALARM = "escalating_alarm"
+    fun setEscalatingVolumeEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_ESCALATING_ALARM, enabled).apply()
+    }
+    fun isEscalatingVolumeEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_ESCALATING_ALARM, false)
+    }
+
+    // Biometric Unlock
+    private const val KEY_BIOMETRIC_UNLOCK = "biometric_unlock"
+    fun setBiometricUnlockEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BIOMETRIC_UNLOCK, enabled).apply()
+    }
+    fun isBiometricUnlockEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_BIOMETRIC_UNLOCK, false)
+    }
+
+    // Bedtime Schedule
+    private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
+    private const val KEY_SCHEDULE_START = "schedule_start"
+    private const val KEY_SCHEDULE_END = "schedule_end"
+
+    fun setScheduleEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SCHEDULE_ENABLED, enabled).apply()
+    }
+    fun isScheduleEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_SCHEDULE_ENABLED, false)
+    }
+    fun setScheduleStart(context: Context, start: String) { // HH:mm format
+        getPrefs(context).edit().putString(KEY_SCHEDULE_START, start).apply()
+    }
+    fun getScheduleStart(context: Context): String {
+        return getPrefs(context).getString(KEY_SCHEDULE_START, "23:00") ?: "23:00"
+    }
+    fun setScheduleEnd(context: Context, end: String) {
+        getPrefs(context).edit().putString(KEY_SCHEDULE_END, end).apply()
+    }
+    fun getScheduleEnd(context: Context): String {
+        return getPrefs(context).getString(KEY_SCHEDULE_END, "07:00") ?: "07:00"
+    }
+
+    /**
+     * Checks if the app should monitor calls right now.
+     * Evaluates the master toggle AND the schedule (if enabled).
+     */
+    fun isCurrentlyActive(context: Context): Boolean {
+        if (!isMonitoringEnabled(context)) return false
+        if (!isScheduleEnabled(context)) return true
+
+        val start = getScheduleStart(context)
+        val end = getScheduleEnd(context)
+        try {
+            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+            val nowTime = sdf.format(Date())
+            val nowStr = nowTime.replace(":", "").toInt()
+            val startStr = start.replace(":", "").toInt()
+            val endStr = end.replace(":", "").toInt()
+
+            return if (startStr < endStr) {
+                // e.g. 09:00 to 17:00
+                nowStr in startStr..endStr
+            } else {
+                // e.g. 23:00 to 07:00 (crosses midnight)
+                nowStr >= startStr || nowStr <= endStr
+            }
+        } catch (e: Exception) {
+            return true // Fallback
+        }
     }
 }

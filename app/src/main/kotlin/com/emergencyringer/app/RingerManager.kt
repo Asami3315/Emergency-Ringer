@@ -38,6 +38,7 @@ object RingerManager {
     private var ringtone: android.media.Ringtone? = null  // Ringtone API fallback
     private var toneGenerator: ToneGenerator? = null
     private var sirenJob: Job? = null
+    private var volumeJob: Job? = null
     private var vibrator: Vibrator? = null
     private var flashlightJob: Job? = null
     private var callStateWatcherJob: Job? = null  // polls call state every 1s to auto-stop alarm
@@ -200,12 +201,31 @@ object RingerManager {
                         player.setDataSource(context, uri)
                         player.prepare()
                         val vol = volumePercent / 100f
-                        player.setVolume(vol, vol)
+                        val isEscalating = EmergencyContactRepository.isEscalatingVolumeEnabled(context)
+                        if (isEscalating) {
+                            player.setVolume(0.1f, 0.1f)
+                        } else {
+                            player.setVolume(vol, vol)
+                        }
+                        
                         player.start()
                         mediaPlayer = player
                         EmergencyContactRepository.isRingerPlaying = true
                         playerStarted = true
-                        AppLog.log("✅ MediaPlayer started (USAGE_ALARM)", context)
+                        
+                        if (isEscalating) {
+                            volumeJob?.cancel()
+                            volumeJob = CoroutineScope(Dispatchers.Default).launch {
+                                var currentVol = 0.1f
+                                while (isActive && currentVol < vol && EmergencyContactRepository.isRingerPlaying) {
+                                    delay(1000)
+                                    currentVol += 0.1f
+                                    if (currentVol > vol) currentVol = vol
+                                    player.setVolume(currentVol, currentVol)
+                                }
+                            }
+                        }
+                        AppLog.log("✅ MediaPlayer started (USAGE_ALARM)${if (isEscalating) " [Escalating]" else ""}", context)
                     } catch (e: Exception) {
                         AppLog.log("⚠️ MediaPlayer failed: ${e.message} - trying Ringtone API", context)
                         Log.e(TAG, "MediaPlayer failed: ${e.message}", e)
@@ -341,9 +361,11 @@ object RingerManager {
             toneGenerator = null
         }
         
-        // Cancel siren coroutine
+        // Cancel siren and volume coroutines
         sirenJob?.cancel()
         sirenJob = null
+        volumeJob?.cancel()
+        volumeJob = null
         
         // Cancel call state watcher
         callStateWatcherJob?.cancel()

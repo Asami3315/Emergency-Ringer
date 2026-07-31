@@ -273,7 +273,7 @@ class NotificationService : NotificationListenerService() {
             val fastText  = fastExtras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString()?.trim() ?: ""
             AppLog.log("⚡ FAST PATH: title='$fastTitle' text='$fastText'", applicationContext)
             val isMissed = fastText.contains("missed", ignoreCase = true) || fastTitle.contains("missed", ignoreCase = true)
-            if (!isMissed && EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
+            if (!isMissed && EmergencyContactRepository.isCurrentlyActive(applicationContext)) {
                 val wl = EmergencyContactRepository.getWhitelistedNames(applicationContext)
                 val hit = wl.any { ContactNormalizer.matches(it, fastTitle) || ContactNormalizer.matches(it, fastText) }
                 AppLog.log("⚡ whitelist=$wl match=$hit", applicationContext)
@@ -368,9 +368,9 @@ class NotificationService : NotificationListenerService() {
             return
         }
 
-        // Check if monitoring is enabled
-        if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) {
-            Log.i(TAG, "⏸️ Monitoring disabled by user - skipping emergency ringer")
+        // Check if monitoring is enabled and active in schedule
+        if (!EmergencyContactRepository.isCurrentlyActive(applicationContext)) {
+            Log.i(TAG, "⏸️ Monitoring disabled by user or schedule - skipping emergency ringer")
             AppLog.log("⏸️ Monitoring disabled - ringer not triggered", applicationContext)
             return
         }
@@ -407,13 +407,14 @@ class NotificationService : NotificationListenerService() {
             return
         }
 
-        // PATH B: Not in whitelist → track repeated calls (3 within 1 hour = emergency)
+        // PATH B: Not in whitelist → track repeated calls (configured count within configured window)
         val callerKey = callerName.lowercase().trim()
-        val callCount = EmergencyContactRepository.recordIncomingCall(callerKey)
-        Log.i(TAG, "🔁 Repeated caller '$callerKey' count=$callCount/${EmergencyContactRepository.REPEATED_CALL_THRESHOLD}")
-        AppLog.log("🔁 '$callerName' called $callCount/${EmergencyContactRepository.REPEATED_CALL_THRESHOLD} times", applicationContext)
+        val callCount = EmergencyContactRepository.recordIncomingCall(applicationContext, callerKey)
+        val threshold = EmergencyContactRepository.getRepeatedCallThreshold(applicationContext)
+        Log.i(TAG, "🔁 Repeated caller '$callerKey' count=$callCount/$threshold")
+        AppLog.log("🔁 '$callerName' called $callCount/$threshold times", applicationContext)
 
-        if (callCount >= EmergencyContactRepository.REPEATED_CALL_THRESHOLD) {
+        if (callCount >= threshold) {
             Log.i(TAG, "🚨 REPEATED CALLER ($callCount×) - triggering ringer for: $callerName")
             AppLog.log("🚨 REPEATED CALLER $callCount×: $callerName", applicationContext)
             lastTriggeredCaller = callerText
@@ -449,9 +450,9 @@ class NotificationService : NotificationListenerService() {
      * If so, and message alerts are enabled, plays the default notification sound.
      */
     private fun handleMessageNotification(sbn: StatusBarNotification) {
-        // Feature must be enabled by user
+        // Feature must be enabled by user and active in schedule
         if (!EmergencyContactRepository.isMessageAlertEnabled(applicationContext)) return
-        if (!EmergencyContactRepository.isMonitoringEnabled(applicationContext)) return
+        if (!EmergencyContactRepository.isCurrentlyActive(applicationContext)) return
 
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return

@@ -54,7 +54,9 @@ fun SettingsScreen(
     hasNotificationAccess: Boolean = false,
     isBatteryOptDisabled: Boolean = false,
     onRequestNotification: () -> Unit = {},
-    onRequestBattery: () -> Unit = {}
+    onRequestBattery: () -> Unit = {},
+    isPremium: Boolean = false,
+    onShowPaywall: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var autoStopDuration by remember { mutableStateOf(EmergencyContactRepository.getAutoStopDuration(context)) }
@@ -65,6 +67,24 @@ fun SettingsScreen(
     var isPlaying        by remember { mutableStateOf(false) }
     var ringtoneRefresh  by remember { mutableStateOf(0) }
     var showIntroPreview by remember { mutableStateOf(false) }
+
+    // Advanced features states
+    var escalatingEnabled by remember { mutableStateOf(EmergencyContactRepository.isEscalatingVolumeEnabled(context)) }
+    var repeatThreshold by remember { mutableStateOf(EmergencyContactRepository.getRepeatedCallThreshold(context)) }
+    var repeatWindowMins by remember { mutableStateOf(EmergencyContactRepository.getRepeatedCallWindowMins(context)) }
+    var scheduleEnabled by remember { mutableStateOf(EmergencyContactRepository.isScheduleEnabled(context)) }
+    var scheduleStart by remember { mutableStateOf(EmergencyContactRepository.getScheduleStart(context)) }
+    var scheduleEnd by remember { mutableStateOf(EmergencyContactRepository.getScheduleEnd(context)) }
+    var biometricEnabled by remember { mutableStateOf(EmergencyContactRepository.isBiometricUnlockEnabled(context)) }
+
+    val showTimePicker = { initialTime: String, onTimeSelected: (String) -> Unit ->
+        val parts = initialTime.split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        android.app.TimePickerDialog(context, { _, h, m ->
+            onTimeSelected(String.format(java.util.Locale.US, "%02d:%02d", h, m))
+        }, hour, minute, false).show()
+    }
 
     val ringtoneName = remember(ringtoneRefresh) {
         val saved = EmergencyContactRepository.getRingtoneName(context)
@@ -317,6 +337,17 @@ fun SettingsScreen(
                                 EmergencyContactRepository.setFlashlightEnabled(context, it)
                             }
                         )
+
+                        // Escalating Volume
+                        NeoToggleRow(
+                            icon = Icons.Default.TrendingUp,
+                            label = "Escalating Volume",
+                            checked = escalatingEnabled,
+                            onCheckedChange = {
+                                escalatingEnabled = it
+                                EmergencyContactRepository.setEscalatingVolumeEnabled(context, it)
+                            }
+                        )
                     }
                 }
 
@@ -331,13 +362,18 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "SOUND",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = NeoMutedC.copy(alpha = 0.7f),
-                                letterSpacing = 2.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    "SOUND",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeoMutedC.copy(alpha = 0.7f),
+                                    letterSpacing = 2.sp
+                                )
+                                if (!isPremium) {
+                                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(14.dp))
+                                }
+                            }
                             // Mute toggle icon
                             val isMuted = selectedVolume == 0
                             Icon(
@@ -351,6 +387,10 @@ fun SettingsScreen(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                                     ) {
+                                        if (!isPremium) {
+                                            onShowPaywall()
+                                            return@clickable
+                                        }
                                         if (isMuted) {
                                             // Unmute → restore to 100%
                                             selectedVolume = 100
@@ -409,6 +449,10 @@ fun SettingsScreen(
                                                 indication = null,
                                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                                             ) {
+                                                if (!isPremium) {
+                                                    onShowPaywall()
+                                                    return@clickable
+                                                }
                                                 selectedVolume = volumeLevels[index]
                                                 EmergencyContactRepository.setVolumePercent(context, volumeLevels[index])
                                             }
@@ -470,6 +514,9 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(modifier = Modifier.size(6.dp).background(NeoPrimary, CircleShape))
                                 Text("PREFERENCES", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
+                                if (!isPremium) {
+                                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(12.dp))
+                                }
                             }
 
                             // Currently selected option (tap to expand)
@@ -482,7 +529,9 @@ fun SettingsScreen(
                                     .clickable(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                    ) { systemExpanded = !systemExpanded }
+                                    ) { 
+                                        if (!isPremium) onShowPaywall() else systemExpanded = !systemExpanded 
+                                    }
                                     .padding(horizontal = 18.dp, vertical = 14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -552,7 +601,7 @@ fun SettingsScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedButton(
-                                        onClick = onSelectRingtone,
+                                        onClick = { if (!isPremium) onShowPaywall() else onSelectRingtone() },
                                         modifier = Modifier.fillMaxWidth().height(48.dp).weightedSpring(),
                                         shape = RoundedCornerShape(14.dp),
                                         border = BorderStroke(1.dp, NeoPrimary),
@@ -577,6 +626,128 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // ── Repeated Callers Configuration ───────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Text(
+                            "REPEATED CALLERS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeoMutedC.copy(alpha = 0.7f),
+                            letterSpacing = 2.sp
+                        )
+
+                        // Threshold slider
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Trigger Threshold", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Text("$repeatThreshold calls", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = NeoPrimary)
+                            }
+                            Text("Calls required from unknown number to trigger alarm.", fontSize = 11.sp, color = NeoMutedC)
+                            Slider(
+                                value = repeatThreshold.toFloat(),
+                                onValueChange = { repeatThreshold = it.toInt() },
+                                onValueChangeFinished = { EmergencyContactRepository.setRepeatedCallThreshold(context, repeatThreshold) },
+                                valueRange = 1f..5f,
+                                steps = 3,
+                                colors = SliderDefaults.colors(thumbColor = NeoPrimary, activeTrackColor = NeoPrimary)
+                            )
+                        }
+
+                        // Window slider
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Time Window", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                Text("$repeatWindowMins mins", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = NeoPrimary)
+                            }
+                            Text("Timeframe in which the calls must occur.", fontSize = 11.sp, color = NeoMutedC)
+                            Slider(
+                                value = repeatWindowMins.toFloat(),
+                                onValueChange = { repeatWindowMins = it.toInt() },
+                                onValueChangeFinished = { EmergencyContactRepository.setRepeatedCallWindowMins(context, repeatWindowMins) },
+                                valueRange = 15f..120f,
+                                steps = 6, // 15, 30, 45, 60, 75, 90, 105, 120
+                                colors = SliderDefaults.colors(thumbColor = NeoPrimary, activeTrackColor = NeoPrimary)
+                            )
+                        }
+                    }
+                }
+
+                // ── Bedtime Schedule ──────────────────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "BEDTIME SCHEDULE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = NeoMutedC.copy(alpha = 0.7f),
+                                letterSpacing = 2.sp
+                            )
+                            Switch(
+                                checked = scheduleEnabled,
+                                onCheckedChange = {
+                                    scheduleEnabled = it
+                                    EmergencyContactRepository.setScheduleEnabled(context, it)
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = NeoPrimary)
+                            )
+                        }
+                        Text("Automatically activate the Emergency Ringer during these hours.", fontSize = 12.sp, color = NeoMutedC)
+
+                        androidx.compose.animation.AnimatedVisibility(visible = scheduleEnabled) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0xFFF8F8F8), RoundedCornerShape(12.dp))
+                                        .clickable { showTimePicker(scheduleStart) { scheduleStart = it; EmergencyContactRepository.setScheduleStart(context, it) } }
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Start Time", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                    Text(scheduleStart, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = NeoPrimary)
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .background(Color(0xFFF8F8F8), RoundedCornerShape(12.dp))
+                                        .clickable { showTimePicker(scheduleEnd) { scheduleEnd = it; EmergencyContactRepository.setScheduleEnd(context, it) } }
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("End Time", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
+                                    Text(scheduleEnd, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = NeoPrimary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Security ──────────────────────────────────────
+                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Text(
+                            "SECURITY",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeoMutedC.copy(alpha = 0.7f),
+                            letterSpacing = 2.sp
+                        )
+
+                        NeoToggleRow(
+                            icon = Icons.Default.Fingerprint,
+                            label = "Require Biometric Unlock",
+                            checked = biometricEnabled,
+                            isPremiumLocked = !isPremium,
+                            onPremiumRequired = onShowPaywall,
+                            onCheckedChange = {
+                                biometricEnabled = it
+                                EmergencyContactRepository.setBiometricUnlockEnabled(context, it)
+                            }
+                        )
+                        Text("When active, fingerprint or face authentication will be required to stop the ringing alarm.", fontSize = 11.sp, color = NeoMutedC)
                     }
                 }
 
@@ -635,7 +806,7 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "A NEXESTEC PRODUCT",
+                            "A NEXUSTEC PRODUCT",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = NeoTextC.copy(alpha = 0.5f),
@@ -817,9 +988,21 @@ private fun CircleIconButton(
 }
 
 @Composable
-private fun NeoToggleRow(icon: ImageVector, label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun NeoToggleRow(
+    icon: ImageVector, 
+    label: String, 
+    checked: Boolean, 
+    isPremiumLocked: Boolean = false,
+    onPremiumRequired: () -> Unit = {},
+    onCheckedChange: (Boolean) -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+            indication = null
+        ) {
+            if (isPremiumLocked) onPremiumRequired()
+        },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -832,11 +1015,16 @@ private fun NeoToggleRow(icon: ImageVector, label: String, checked: Boolean, onC
             ) {
                 Icon(icon, contentDescription = null, tint = if (checked) NeoPrimary else NeoMutedC, modifier = Modifier.size(22.dp))
             }
-            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC.copy(alpha = 0.8f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC.copy(alpha = 0.8f))
+                if (isPremiumLocked) {
+                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(14.dp))
+                }
+            }
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = { if (isPremiumLocked) onPremiumRequired() else onCheckedChange(it) },
             colors = SwitchDefaults.colors(
                 checkedTrackColor = NeoPrimary,
                 checkedThumbColor = Color.White,

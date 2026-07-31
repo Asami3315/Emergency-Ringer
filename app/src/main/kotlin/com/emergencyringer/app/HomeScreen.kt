@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import com.emergencyringer.app.magneticAffinity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -58,12 +59,9 @@ fun HomeScreen(
     monitoringEnabled: Boolean,
     onMonitoringToggle: (Boolean) -> Unit,
     onAddContact: () -> Unit,
-    onRequestNotification: () -> Unit,
-    onRequestDnd: () -> Unit,
-    onRequestBattery: () -> Unit,
     onRemoveContact: (String, String) -> Unit,
 ) {
-    val allPermsReady = hasNotificationAccess && hasDndAccess
+    val allPermsReady = hasNotificationAccess && hasDndAccess && hasContactsPermission && isBatteryOptDisabled
 
     Box(
         modifier = Modifier
@@ -127,8 +125,7 @@ fun HomeScreen(
                 HeroStatusCard(
                     isActive = allPermsReady,
                     monitoringEnabled = monitoringEnabled,
-                    onToggle = onMonitoringToggle,
-                    activeGuards = contacts.size
+                    onToggle = onMonitoringToggle
                 )
 
 
@@ -175,7 +172,7 @@ fun HomeScreen(
                                                 contact = contact,
                                                 accentColor = accentColors[globalIdx % accentColors.size],
                                                 iconTint = iconTints[globalIdx % iconTints.size],
-                                                onRemove = { onRemoveContact(contact.name, contact.number ?: "") }
+                                                onRemove = { onRemoveContact(contact.name, contact.number) }
                                             )
                                         }
                                     }
@@ -195,8 +192,7 @@ fun HomeScreen(
 private fun HeroStatusCard(
     isActive: Boolean,
     monitoringEnabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    activeGuards: Int
+    onToggle: (Boolean) -> Unit
 ) {
     val pulse = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulse.animateFloat(
@@ -228,25 +224,33 @@ private fun HeroStatusCard(
                 .border(1.dp, Color.White, RoundedCornerShape(32.dp))
                 .padding(24.dp)
         ) {
-            // Yellow dot at top-left
+            // Status UI logic
+            val statusColor = when {
+                !isActive -> Color(0xFFE53E3E) // Red
+                monitoringEnabled -> NeoYellow
+                else -> Color.Gray
+            }
+            val statusBg = when {
+                !isActive -> Color(0xFFE53E3E)
+                monitoringEnabled -> NeoYellow
+                else -> Color.Gray.copy(alpha = 0.3f)
+            }
+
+            // Status dot at top-left
             Box(modifier = Modifier.size(10.dp).align(Alignment.TopStart)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            if (isActive && monitoringEnabled) NeoYellow.copy(alpha = pulseAlpha)
-                            else Color.Gray.copy(alpha = 0.3f),
-                            CircleShape
-                        )
+                        .graphicsLayer {
+                            alpha = if (isActive && monitoringEnabled) pulseAlpha else 1f
+                        }
+                        .background(statusBg, CircleShape)
                 )
                 Box(
                     modifier = Modifier
                         .size(6.dp)
                         .align(Alignment.Center)
-                        .background(
-                            if (isActive && monitoringEnabled) NeoYellow else Color.Gray,
-                            CircleShape
-                        )
+                        .background(statusColor, CircleShape)
                 )
             }
 
@@ -255,16 +259,35 @@ private fun HeroStatusCard(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(Modifier.height(8.dp))
+                
+                val titleText = when {
+                    !isActive -> "Action Required"
+                    monitoringEnabled -> "Active"
+                    else -> "Paused"
+                }
+                val titleColor = when {
+                    !isActive -> Color(0xFFE53E3E)
+                    monitoringEnabled -> NeoText
+                    else -> Color.Black.copy(alpha = 0.38f)
+                }
+
                 Text(
-                    if (isActive && monitoringEnabled) "Active" else "Paused",
+                    titleText,
                     fontSize = 32.sp,
                     fontWeight = if (isActive && monitoringEnabled) FontWeight.Bold else FontWeight.Thin,
-                    color = if (isActive && monitoringEnabled) NeoText else Color.Black.copy(alpha = 0.38f),
+                    color = titleColor,
                     lineHeight = 34.sp
                 )
-
-
-
+                
+                if (!isActive) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Please grant permissions in Settings",
+                        fontSize = 12.sp,
+                        color = Color(0xFFE53E3E).copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
 
                 // Master toggle row
@@ -361,9 +384,9 @@ private fun ContactCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (!contact.number.isNullOrBlank()) {
+                    if (contact.number.isNotBlank()) {
                         Text(
-                            contact.number!!,
+                            contact.number,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = iconTint.copy(alpha = 0.7f),

@@ -36,8 +36,8 @@ class CallReceiver : BroadcastReceiver() {
 
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
-                if (!EmergencyContactRepository.isMonitoringEnabled(context)) {
-                    AppLog.log("⏸️ [CallReceiver] Monitoring disabled", context)
+                if (!EmergencyContactRepository.isCurrentlyActive(context)) {
+                    AppLog.log("⏸️ [CallReceiver] Monitoring disabled or outside schedule", context)
                     return
                 }
 
@@ -75,17 +75,29 @@ class CallReceiver : BroadcastReceiver() {
                     }
                 }
 
-                // ── FALLBACK: Wait 4s for notification to trigger via name ──
+                // ── REPEATED CALLER TRACKING (Fallback) ──
                 // If NotificationListenerService matched by name, it fires first.
-                // Otherwise we trigger as fallback for any incoming call when contacts are set.
-                CoroutineScope(Dispatchers.Default).launch {
-                    delay(4_000)
-                    if (!EmergencyContactRepository.isRingerPlaying
-                        && EmergencyContactRepository.isMonitoringEnabled(context)) {
-                        AppLog.log("⚡ [CallReceiver] 4s fallback trigger — name match didn't fire!", context)
-                        lastReceiverTriggerTime = System.currentTimeMillis()
-                        RingerManager.triggerEmergencyRinger(context)
+                // Otherwise we track the number for repeated calls here.
+                if (incomingNumber.isNotEmpty()) {
+                    val callCount = EmergencyContactRepository.recordIncomingCall(context, incomingNumber)
+                    val threshold = EmergencyContactRepository.getRepeatedCallThreshold(context)
+                    if (callCount >= threshold) {
+                        CoroutineScope(Dispatchers.Default).launch {
+                            delay(4_000) // Give NotificationService a chance to trigger first with better name
+                            if (!EmergencyContactRepository.isRingerPlaying
+                                && EmergencyContactRepository.isCurrentlyActive(context)) {
+                                AppLog.log("🚨 [CallReceiver] REPEATED CALLER $callCount×: $incomingNumber", context)
+                                lastReceiverTriggerTime = System.currentTimeMillis()
+                                EmergencyContactRepository.addTriggerRecord(incomingNumber, "Repeated Caller (${callCount}×)", context)
+                                EmergencyContactRepository.resetCallCount(incomingNumber)
+                                RingerManager.triggerEmergencyRinger(context)
+                            }
+                        }
+                    } else {
+                        AppLog.log("🔁 [CallReceiver] Repeated caller count for $incomingNumber: $callCount/$threshold", context)
                     }
+                } else {
+                    AppLog.log("📋 [CallReceiver] Empty incoming number, skipping repeated caller check", context)
                 }
             }
 

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context as AndroidContext
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -61,12 +62,40 @@ fun HistoryScreen() {
     val context = LocalContext.current
     var history by remember { mutableStateOf(EmergencyContactRepository.getTriggerHistory(context)) }
     var showClearDialog by remember { mutableStateOf(false) }
-    val logMessages by AppLog.messages.collectAsState()
+    var selectedFilter by remember { mutableStateOf("All") }
+    var expandedRecordTs by remember { mutableStateOf<Long?>(null) }
 
-    // Refresh AppLog from file (in case service wrote logs while app was closed)
-    LaunchedEffect(Unit) {
-        AppLog.init(context)
-        AppLog.refreshFromFile()
+    // Compute filtered history based on selected chip
+    val filteredHistory = remember(history, selectedFilter) {
+        when (selectedFilter) {
+            "Emergency" -> history.filter { it.reason.contains("Emergency Contact", ignoreCase = true) }
+            "Messages" -> history.filter { it.reason.contains("Message", ignoreCase = true) }
+            "Alerts" -> history.filter { it.reason.contains("Repeated", ignoreCase = true) }
+            else -> history
+        }
+    }
+
+    val sdfDate = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val displayDateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val fullFormat = remember { SimpleDateFormat("hh:mm:ss a, dd MMM yyyy", Locale.getDefault()) }
+
+    val grouped = remember(filteredHistory) {
+        val today = sdfDate.format(Date())
+        val yesterday = sdfDate.format(Date(System.currentTimeMillis() - 86_400_000L))
+
+        filteredHistory
+            .groupBy { sdfDate.format(Date(it.timestampMs)) }
+            .entries
+            .sortedByDescending { it.key }
+            .map { entry ->
+                val label = when (entry.key) {
+                    today -> "Today"
+                    yesterday -> "Yesterday"
+                    else -> displayDateFormat.format(sdfDate.parse(entry.key) ?: Date())
+                }
+                Pair(label, entry.value)
+            }
     }
 
     if (showClearDialog) {
@@ -136,7 +165,72 @@ fun HistoryScreen() {
                 }
             }
 
-            if (history.isEmpty()) {
+            // ── Filter Chips ─────────────────────────────────────
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("All", "Alerts", "Messages", "Emergency").forEach { filter ->
+                        val isSelected = selectedFilter == filter
+                        Box(
+                            modifier = Modifier
+                                .height(34.dp)
+                                .clip(RoundedCornerShape(17.dp))
+                                .background(
+                                    if (isSelected) WAccent
+                                    else Color.White.copy(alpha = 0.65f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSelected) WAccent else WLine,
+                                    RoundedCornerShape(17.dp)
+                                )
+                                .clickable { selectedFilter = filter }
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                filter,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold
+                                             else FontWeight.Medium,
+                                color = if (isSelected) Color.White else WMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Stats Summary ────────────────────────────────────
+            if (history.isNotEmpty()) {
+                item {
+                    val emergencyCount = history.count { it.reason.contains("Emergency Contact", ignoreCase = true) }
+                    val messageCount = history.count { it.reason.contains("Message", ignoreCase = true) }
+                    val alertCount = history.count { it.reason.contains("Repeated", ignoreCase = true) }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .padding(bottom = 16.dp)
+                            .background(Color.White.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                            .border(1.dp, WLine, RoundedCornerShape(16.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatItem("${history.size}", "Total")
+                        StatItem("$alertCount", "Alerts")
+                        StatItem("$messageCount", "Messages")
+                        StatItem("$emergencyCount", "Emergency")
+                    }
+                }
+            }
+
+            if (filteredHistory.isEmpty()) {
                 // Empty state
                 item {
                     Box(
@@ -157,9 +251,20 @@ fun HistoryScreen() {
                             ) {
                                 Icon(Icons.Default.History, null, tint = WAccent, modifier = Modifier.size(40.dp))
                             }
-                            Text("No triggers yet", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = WText)
                             Text(
-                                "When an emergency alarm fires,\nit will appear here.",
+                                when (selectedFilter) {
+                                    "Emergency" -> "No emergency alerts"
+                                    "Messages" -> "No message alerts"
+                                    "Alerts" -> "No repeated caller alerts"
+                                    else -> "No triggers yet"
+                                },
+                                fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = WText
+                            )
+                            Text(
+                                when (selectedFilter) {
+                                    "All" -> "When an emergency alarm fires,\nit will appear here."
+                                    else -> "Try selecting a different filter."
+                                },
                                 fontSize = 14.sp, color = WMuted,
                                 textAlign = TextAlign.Center, lineHeight = 20.sp
                             )
@@ -167,22 +272,8 @@ fun HistoryScreen() {
                     }
                 }
             } else {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val today = sdf.format(Date())
-                val yesterday = sdf.format(Date(System.currentTimeMillis() - 86_400_000L))
 
-                val grouped = history
-                    .groupBy { sdf.format(Date(it.timestampMs)) }
-                    .entries
-                    .sortedByDescending { it.key }
-
-                grouped.forEachIndexed { groupIdx, (dateKey, records) ->
-                    val dateLabel = when (dateKey) {
-                        today     -> "Today"
-                        yesterday -> "Yesterday"
-                        else      -> SimpleDateFormat("d MMM yyyy", Locale.getDefault())
-                                        .format(sdf.parse(dateKey) ?: Date())
-                    }
+                grouped.forEachIndexed { groupIdx, (dateLabel, records) ->
 
                     stickyHeader {
                         // ── Date separator ─────────────────────────
@@ -308,14 +399,17 @@ fun HistoryScreen() {
 
                             // ── Card ────────────────────────────
                             val style = resolveStyle(record.reason)
-                            val timeStr = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                                .format(Date(record.timestampMs))
+                            val timeStr = timeFormat.format(Date(record.timestampMs))
 
                              Card(
                                  modifier = Modifier
                                      .weight(1f)
                                      .weightedSpring()
-                                     .padding(bottom = 20.dp),
+                                     .padding(bottom = 20.dp)
+                                     .clickable {
+                                         expandedRecordTs = if (expandedRecordTs == record.timestampMs) null
+                                                            else record.timestampMs
+                                     },
                                  shape = RoundedCornerShape(20.dp),
                                  colors = CardDefaults.cardColors(containerColor = Color(0xA6FFFFFF)),
                                  elevation = CardDefaults.cardElevation(0.dp)
@@ -376,8 +470,35 @@ fun HistoryScreen() {
                                              }
                                          }
                                      }
-                                }
-                            }
+                                     // ── Expanded details ────────────
+                                     AnimatedVisibility(visible = expandedRecordTs == record.timestampMs) {
+                                         Column {
+                                             Spacer(Modifier.height(10.dp))
+                                             @Suppress("DEPRECATION") Divider(color = WLine, thickness = 1.dp)
+                                             Spacer(Modifier.height(10.dp))
+                                             Row(
+                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                 verticalAlignment = Alignment.CenterVertically
+                                             ) {
+                                                 Icon(Icons.Default.Info, null, tint = WMuted, modifier = Modifier.size(14.dp))
+                                                 Text("Trigger: ${record.reason}", fontSize = 12.sp, color = WMuted)
+                                             }
+                                             Spacer(Modifier.height(4.dp))
+                                             Row(
+                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                 verticalAlignment = Alignment.CenterVertically
+                                             ) {
+                                                 Icon(Icons.Default.Schedule, null, tint = WMuted.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                                                 Text(
+                                                     fullFormat.format(Date(record.timestampMs)),
+                                                     fontSize = 12.sp,
+                                                     color = WMuted.copy(alpha = 0.6f)
+                                                 )
+                                             }
+                                         }
+                                     }
+                                 }
+                             }
                         }
                     }
                 }
@@ -426,4 +547,12 @@ private fun resolveStyle(reason: String): RowStyle = when {
     else ->
         RowStyle(Color.White, Color(0xFF94A3B8), Icons.Default.MedicalServices,
             BadgeKBg, BadgeKTxt, "KEYWORD", italic = true)
+}
+
+@Composable
+private fun StatItem(count: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(count, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = WAccent)
+        Text(label, fontSize = 11.sp, color = WMuted, fontWeight = FontWeight.Medium)
+    }
 }
