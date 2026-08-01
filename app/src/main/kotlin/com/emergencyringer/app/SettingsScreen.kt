@@ -370,9 +370,6 @@ fun SettingsScreen(
                                     color = NeoMutedC.copy(alpha = 0.7f),
                                     letterSpacing = 2.sp
                                 )
-                                if (!isPremium) {
-                                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(14.dp))
-                                }
                             }
                             // Mute toggle icon
                             val isMuted = selectedVolume == 0
@@ -475,18 +472,36 @@ fun SettingsScreen(
                             Spacer(Modifier.height(12.dp))
 
                             if (activeIndex >= 0 && volumeLevels[activeIndex] >= 90) {
-                                Text(
-                                    "Max Intensity",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = NeoPrimary,
-                                    letterSpacing = 1.sp,
+                                Box(
                                     modifier = Modifier
                                         .align(Alignment.CenterHorizontally)
-                                        .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
-                                        .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
-                                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                                )
+                                ) {
+                                    // Lock icon above the box
+                                    Icon(
+                                        Icons.Default.Lock,
+                                        contentDescription = "Premium Feature",
+                                        tint = NeoPrimary,
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .align(Alignment.TopCenter)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    // Max Intensity box below the lock
+                                    Box(
+                                        modifier = Modifier
+                                            .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
+                                            .border(1.dp, Color(0xFFFEF3C7), RoundedCornerShape(50.dp))
+                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                                    ) {
+                                        Text(
+                                            "Max Intensity",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = NeoPrimary,
+                                            letterSpacing = 1.sp
+                                        )
+                                    }
+                                }
                             }
 
                             Spacer(Modifier.height(16.dp))
@@ -514,9 +529,6 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(modifier = Modifier.size(6.dp).background(NeoPrimary, CircleShape))
                                 Text("PREFERENCES", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
-                                if (!isPremium) {
-                                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(12.dp))
-                                }
                             }
 
                             // Currently selected option (tap to expand)
@@ -738,7 +750,7 @@ fun SettingsScreen(
 
                         NeoToggleRow(
                             icon = Icons.Default.Fingerprint,
-                            label = "Require Biometric Unlock",
+                            label = "Biometric Unlock",
                             checked = biometricEnabled,
                             isPremiumLocked = !isPremium,
                             onPremiumRequired = onShowPaywall,
@@ -1017,9 +1029,6 @@ private fun NeoToggleRow(
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = NeoTextC.copy(alpha = 0.8f))
-                if (isPremiumLocked) {
-                    Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(14.dp))
-                }
             }
         }
         Switch(

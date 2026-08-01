@@ -15,7 +15,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -36,6 +38,9 @@ fun PremiumScreen(
 ) {
     val context = LocalContext.current as Activity
 
+    // Handle back button press
+    BackHandler(onBack = onClose)
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -52,17 +57,20 @@ fun PremiumScreen(
                 .background(Color.Black.copy(alpha = 0.2f))
         )
 
-        // Close Button
+        // Close Button (positioned outside scrollable content)
         Box(
             modifier = Modifier
                 .padding(top = 48.dp, end = 24.dp)
-                .size(40.dp)
+                .size(48.dp)
                 .background(Color.White.copy(alpha = 0.3f), CircleShape)
                 .align(Alignment.TopEnd)
-                .clickable { onClose() },
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) { onClose() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
         }
 
         Column(
