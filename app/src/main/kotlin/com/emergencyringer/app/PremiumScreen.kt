@@ -114,7 +114,6 @@ fun PremiumScreen(
                         FeatureRow("Bedtime Schedule Protection")
                         FeatureRow("Escalating Volume Alerts")
                         FeatureRow("Custom Alert Ringtones")
-                        FeatureRow("Message Keyword Triggers")
                     }
                 }
             }

@@ -47,6 +47,13 @@ object RingerManager {
     private var callStateWatcherJob: Job? = null  // polls call state every 1s to auto-stop alarm
     
     private var mediaSession: MediaSession? = null
+    private var hardwareButtonReceiver: android.content.BroadcastReceiver? = null
+    
+    // When the user manually dismisses the alarm (power/volume button),
+    // we record the time so the same notification won't re-trigger it.
+    @Volatile
+    var userDismissedTime: Long = 0L
+        private set
     
     private var stopHandler: Handler? = null
     private var stopRunnable: Runnable? = null
@@ -160,10 +167,10 @@ object RingerManager {
                     savedAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
                 }
                 val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-                val volumePercent = if (isPremium) EmergencyContactRepository.getVolumePercent(context) else 100
+                val volumePercent = EmergencyContactRepository.getVolumePercent(context)
                 val targetAlarmVol = java.lang.Math.max(1, (maxAlarm * (volumePercent / 100f)).toInt())
 
-                val isEscalating = if (isPremium) EmergencyContactRepository.isEscalatingVolumeEnabled(context) else false
+                val isEscalating = EmergencyContactRepository.isEscalatingVolumeEnabled(context)
                 if (isEscalating) {
                     am.setStreamVolume(AudioManager.STREAM_ALARM, 1, 0)
                     AppLog.log("🔔 Alarm vol escalating to $targetAlarmVol/$maxAlarm", context)
@@ -310,38 +317,52 @@ object RingerManager {
             // ══════════════════════════════════════
             // STEP 5: Vibration + Flashlight + Auto-stop + Call Watcher
             // ══════════════════════════════════════
+            val autoStopEnabled = EmergencyContactRepository.isAutoStopEnabled(context)
             val autoStopDuration = durationMs ?: EmergencyContactRepository.getAutoStopDuration(context)
-            AppLog.log("⏱ Auto-stop in ${autoStopDuration / 1000}s", context)
+            
+            if (durationMs != null || autoStopEnabled) {
+                AppLog.log("⏱ Auto-stop in ${autoStopDuration / 1000}s", context)
+                stopHandler = Handler(Looper.getMainLooper())
+                stopRunnable = Runnable {
+                    AppLog.log("⏱ Timeout - stopping alarm", context)
+                    stopCurrentRinger(context)
+                }
+                stopHandler?.postDelayed(stopRunnable!!, autoStopDuration)
+            } else {
+                AppLog.log("⏱ Auto-stop disabled", context)
+            }
 
             if (durationMs == null && EmergencyContactRepository.isVibrateEnabled(context)) startVibration(context)
             if (durationMs == null && EmergencyContactRepository.isFlashlightEnabled(context)) startFlashlight(context)
-
-            stopHandler = Handler(Looper.getMainLooper())
-            stopRunnable = Runnable {
-                AppLog.log("⏱ Timeout - stopping alarm", context)
-                stopCurrentRinger(context)
-            }
-            stopHandler?.postDelayed(stopRunnable!!, autoStopDuration)
             
-            // Start real-time call state watcher (most reliable stop mechanism)
+            // Start real-time call state watcher
             if (durationMs == null) startCallStateWatcher(context)
             
-            // Capture hardware volume buttons to stop the alarm
+            // Power Button: press to mute the alarm (screen off = stop)
             try {
-                mediaSession?.release()
-                mediaSession = MediaSession(context, "EmergencyRingerSession").apply {
-                    setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1.0f).build())
-                    setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, 100, 50) {
-                        override fun onAdjustVolume(direction: Int) {
-                            Log.i(TAG, "Volume button pressed ($direction) - stopping alarm")
-                            AppLog.log("🔘 Volume button pressed — stopping alarm", context)
-                            stopCurrentRinger(context)
-                        }
-                    })
-                    isActive = true
+                hardwareButtonReceiver?.let {
+                    try { context.applicationContext.unregisterReceiver(it) } catch (_: Exception) {}
                 }
+                hardwareButtonReceiver = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(ctx: Context?, intent: android.content.Intent?) {
+                        if (intent?.action == android.content.Intent.ACTION_SCREEN_OFF) {
+                            Log.i(TAG, "Power button pressed — stopping alarm")
+                            ctx?.let {
+                                AppLog.log("🔘 Power button — stopping alarm", it)
+                                userDismissedTime = System.currentTimeMillis()
+                                // Record exactly which call we dismissed, so it NEVER re-triggers
+                                NotificationService.dismissedCallKey = NotificationService.lastTriggerSbnKey
+                                stopCurrentRinger(it)
+                            }
+                        }
+                    }
+                }
+                val filter = android.content.IntentFilter().apply {
+                    addAction(android.content.Intent.ACTION_SCREEN_OFF)
+                }
+                context.applicationContext.registerReceiver(hardwareButtonReceiver, filter)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start MediaSession for volume keys: ${e.message}")
+                Log.e(TAG, "Failed to register power button receiver: ${e.message}")
             }
 
         } catch (e: Exception) {
@@ -359,26 +380,40 @@ object RingerManager {
         callStateWatcherJob?.cancel()
         callStateWatcherJob = CoroutineScope(Dispatchers.Default).launch {
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                ?: return@launch
-            AppLog.log("📞 Call state watcher started", context)
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            AppLog.log("📞 Hardware/Call watcher started", context)
             
             // Wait briefly for the call to fully establish before watching
             delay(2000)
             
+            var wasScreenOn = pm?.isInteractive ?: true
+            
             while (isActive && EmergencyContactRepository.isRingerPlaying) {
                 try {
+                    // Check call state
                     @Suppress("DEPRECATION")
-                    val state = tm.callState  // Works without permission on many devices
+                    val state = tm?.callState ?: TelephonyManager.CALL_STATE_IDLE
                     if (state == TelephonyManager.CALL_STATE_IDLE ||
                         state == TelephonyManager.CALL_STATE_OFFHOOK) {
                         AppLog.log("📞 Watcher: call state=$state → stopping alarm", context)
                         stopCurrentRinger(context)
                         break
                     }
+                    
+                    // Check screen state (for Xiaomi/Redmi power button muting)
+                    val isScreenOn = pm?.isInteractive ?: true
+                    if (wasScreenOn && !isScreenOn) {
+                        AppLog.log("🔘 Screen turned off (Power Button) → stopping alarm", context)
+                        NotificationService.dismissedCallKey = NotificationService.lastTriggerSbnKey
+                        stopCurrentRinger(context)
+                        break
+                    }
+                    wasScreenOn = isScreenOn
+                    
                 } catch (_: Exception) {}
-                delay(1000)  // Poll every second
+                delay(500)  // Poll every 500ms for faster power button response
             }
-            AppLog.log("📞 Call state watcher ended", context)
+            AppLog.log("📞 Hardware/Call watcher ended", context)
         }
     }
 
@@ -431,12 +466,17 @@ object RingerManager {
         callStateWatcherJob?.cancel()
         callStateWatcherJob = null
         
-        // Release media session
+        // Release media session and hardware receiver
         try {
             mediaSession?.isActive = false
             mediaSession?.release()
         } catch (_: Exception) {}
         mediaSession = null
+        
+        try {
+            hardwareButtonReceiver?.let { context.applicationContext.unregisterReceiver(it) }
+        } catch (_: Exception) {}
+        hardwareButtonReceiver = null
         
         stopVibration()
         stopFlashlight()

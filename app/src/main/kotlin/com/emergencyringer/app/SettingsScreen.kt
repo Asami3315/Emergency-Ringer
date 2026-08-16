@@ -233,52 +233,51 @@ fun SettingsScreen(
                         )
 
                         // Auto-stop
+                        var autoStopEnabled by remember { mutableStateOf(EmergencyContactRepository.isAutoStopEnabled(context)) }
+                        
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Start,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Ring Duration", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = NeoTextC)
-                                Spacer(Modifier.width(12.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(Color(0xFFF8F8F8), RoundedCornerShape(20.dp))
-                                        .padding(horizontal = 12.dp, vertical = 5.dp)
-                                ) {
-                                    Text("Auto-silence after", fontSize = 11.sp, color = NeoMutedC, fontWeight = FontWeight.Medium)
+                            NeoToggleRow(
+                                icon = Icons.Default.Timer,
+                                label = "Ring Duration",
+                                checked = autoStopEnabled,
+                                onCheckedChange = {
+                                    autoStopEnabled = it
+                                    EmergencyContactRepository.setAutoStopEnabled(context, it)
                                 }
-                            }
-                            // Pill button row
-                            BoxWithConstraints(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFF5F5F5), RoundedCornerShape(22.dp))
-                                    .padding(6.dp)
-                            ) {
-                                val options = listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L)
-                                val selectedIndex = options.indexOfFirst { it.second == autoStopDuration }.coerceAtLeast(0)
-                                val segmentWidth = maxWidth / options.size
-                                
-                                val animatedOffset by androidx.compose.animation.core.animateDpAsState(
-                                    targetValue = segmentWidth * selectedIndex,
-                                    animationSpec = androidx.compose.animation.core.spring(
-                                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                                        stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-                                    ), label = "pillSlide"
-                                )
+                            )
 
-                                // Background sliding thumb
-                                Box(
+                            // Only show duration selector if Auto-stop is enabled
+                            if (autoStopEnabled) {
+                                // Pill button row
+                                BoxWithConstraints(
                                     modifier = Modifier
-                                        .offset(x = animatedOffset)
-                                        .width(segmentWidth)
-                                        .height(44.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(NeoPrimary)
-                                )
+                                        .fillMaxWidth()
+                                        .background(Color(0xFFF5F5F5), RoundedCornerShape(22.dp))
+                                        .padding(6.dp)
+                                ) {
+                                    val options = listOf("30s" to 30_000L, "1m" to 60_000L, "5m" to 300_000L)
+                                    val selectedIndex = options.indexOfFirst { it.second == autoStopDuration }.coerceAtLeast(0)
+                                    val segmentWidth = maxWidth / options.size
+                                    
+                                    val animatedOffset by androidx.compose.animation.core.animateDpAsState(
+                                        targetValue = segmentWidth * selectedIndex,
+                                        animationSpec = androidx.compose.animation.core.spring(
+                                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                                        ), label = "pillSlide"
+                                    )
+                                    
+                                    // Background sliding thumb
+                                    Box(
+                                        modifier = Modifier
+                                            .offset(x = animatedOffset)
+                                            .width(segmentWidth)
+                                            .height(44.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(NeoPrimary)
+                                    )
 
-                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    Row(modifier = Modifier.fillMaxWidth()) {
                                     options.forEach { (label, ms) ->
                                         val isSelected = autoStopDuration == ms
                                         Box(
@@ -301,23 +300,12 @@ fun SettingsScreen(
                                                 color = if (isSelected) Color.White else NeoTextC
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Gradient divider from code.html
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(Color.Transparent, NeoBorderC, Color.Transparent)
-                                    )
-                                )
-                        )
-
+                                    } // forEach
+                                } // Row
+                            } // BoxWithConstraints
+                        } // if (autoStopEnabled)
+                        } // Column
+                        
                         // Vibrate toggle
                         NeoToggleRow(
                             icon = Icons.Default.Vibration,

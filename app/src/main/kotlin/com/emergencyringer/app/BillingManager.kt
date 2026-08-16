@@ -43,7 +43,7 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
 
         billingClient.queryPurchasesAsync(params) { billingResult, purchases ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                val hasPremium = purchases.any { it.products.contains(PREMIUM_PRODUCT_ID) || it.products.contains("android.test.purchased") }
+                val hasPremium = purchases.any { it.products.contains(PREMIUM_PRODUCT_ID) }
                 EmergencyContactRepository.setPremium(context, hasPremium)
             }
         }
@@ -80,9 +80,8 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
                     .build()
                 billingClient.launchBillingFlow(activity, billingFlowParams)
             } else {
-                // Simulating successful purchase if no Play Store is configured
-                Log.w("BillingManager", "Product not found. Simulating unlock for testing.")
-                EmergencyContactRepository.setPremium(context, true)
+                android.widget.Toast.makeText(context, "Purchase failed or not found. Check network connection.", android.widget.Toast.LENGTH_LONG).show()
+                Log.e("BillingManager", "Purchase failed. Response code: ${billingResult.responseCode}")
             }
         }
     }

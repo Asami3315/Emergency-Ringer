@@ -104,15 +104,16 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 48.dp, bottom = 4.dp),
+                        .padding(top = 16.dp, bottom = 4.dp), // Reduced top padding
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             "KinLink",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.ExtraLight,
-                            color = NeoText
+                            fontSize = 56.sp, // Increased size
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Cursive,
+                            fontWeight = FontWeight.Bold,
+                            color = NeoYellowDark
                         )
                         Text(
                             "Stay connected with your loved ones",
@@ -372,9 +373,10 @@ private fun HeroStatusCard(
 
                 Text(
                     titleText,
-                    fontSize = 32.sp,
-                    fontWeight = if (isActive && monitoringEnabled) FontWeight.Bold else FontWeight.Thin,
-                    color = titleColor,
+                    fontSize = 42.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Cursive,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isActive && monitoringEnabled) NeoYellowDark else titleColor,
                     lineHeight = 34.sp
                 )
                 

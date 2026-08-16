@@ -83,6 +83,11 @@ class NotificationService : NotificationListenerService() {
         // Track if we triggered the ringer (so we know to auto-stop)
         @Volatile
         var ringerWasTriggered = false
+        
+        // If the user manually dismisses the alarm for a call, we store its key
+        // so we NEVER re-trigger for this exact same call session.
+        @Volatile
+        var dismissedCallKey: String? = null
 
         // true = phone went through RINGING (incoming call)
         // false = phone went directly to OFFHOOK (outgoing call — do NOT trigger alarm)
@@ -323,8 +328,9 @@ class NotificationService : NotificationListenerService() {
                 AppLog.log("⚡ FAST PATH: pkg=$pkg cat=${fastNotif.category} title='$fastTitle' text='$fastText'", applicationContext)
                 
                 // ── Outgoing Call Detection ──
-                // SIMPLE: If text is EXACTLY "Calling..." / "Ringing..." / "Dialing..." it's outgoing.
-                // Incoming calls say "Incoming voice call", "Incoming video call", etc.
+                // Incoming calls say "Incoming voice call" / "Incoming video call"
+                // Outgoing calls say "Calling..." / "Ringing..." / "Dialing..."
+                // We use startsWith (not exact match) to catch Unicode ellipsis and variations.
                 val hasIncomingIndicator = textLower.contains("incoming") || 
                                            textLower.contains("voice call") || 
                                            textLower.contains("video call") ||
@@ -334,11 +340,11 @@ class NotificationService : NotificationListenerService() {
                                            textLower.contains("appel entrant") ||
                                            textLower.contains("llamada entrante") ||
                                            textLower.contains("آنے والی")
-                                           
-                val hasOutgoingIndicator = textLower == "calling" || textLower == "calling..." || 
-                                           textLower == "ringing" || textLower == "ringing..." || 
-                                           textLower == "dialing" || textLower == "dialing..." ||
-                                           textLower.startsWith("dialing ")
+                
+                // Use startsWith to catch "Calling...", "Calling…", "Calling someone", etc.
+                val hasOutgoingIndicator = textLower.startsWith("calling") || 
+                                           textLower.startsWith("ringing") || 
+                                           textLower.startsWith("dialing")
                 
                 val hasGenericWhatsAppTitle = isWhatsApp && (
                     titleLower.contains("whatsapp audio call") || 
@@ -348,12 +354,17 @@ class NotificationService : NotificationListenerService() {
                 
                 val blockTelephonyOutgoing = isCallOutgoing && !isWhatsApp
                 
+                // Also check: incoming calls have a fullScreenIntent (to show the call UI)
+                // Outgoing calls typically do NOT have one.
+                val hasFullScreenIntent = fastNotif.fullScreenIntent != null
+                
+                // Block outgoing: has outgoing text, no incoming text, no fullScreenIntent
                 val isOutgoing = blockTelephonyOutgoing || 
-                                 (hasOutgoingIndicator && !hasIncomingIndicator) ||
+                                 (hasOutgoingIndicator && !hasIncomingIndicator && !hasFullScreenIntent) ||
                                  hasGenericWhatsAppTitle
 
                 if (isOutgoing) {
-                    AppLog.log("📤 FAST PATH: Outgoing call blocked (text='$fastText')", applicationContext)
+                    AppLog.log("📤 FAST PATH: Outgoing blocked (text='$fastText' fsi=$hasFullScreenIntent)", applicationContext)
                     return
                 }
                 
@@ -398,7 +409,15 @@ class NotificationService : NotificationListenerService() {
                     AppLog.log("⚡ whitelist=$wl match=$hit title='$fastTitle'", applicationContext)
                     if (hit) {
                         val now = System.currentTimeMillis()
-                        if (lastTriggeredCaller == fastTitle && (now - lastTriggerTime) < 60_000 && EmergencyContactRepository.isRingerPlaying) {
+                        // Block re-trigger if: 
+                        // 1. ringer is already playing for this caller
+                        // 2. user manually dismissed this EXACT call session
+                        val isSameCallDismissed = dismissedCallKey != null && sbn.key == dismissedCallKey
+                        val isStillPlaying = lastTriggeredCaller == fastTitle && (now - lastTriggerTime) < 60_000 && EmergencyContactRepository.isRingerPlaying
+                        
+                        if (isSameCallDismissed) {
+                            AppLog.log("⏭️ FAST PATH: user dismissed this exact call session, not re-triggering", applicationContext)
+                        } else if (isStillPlaying) {
                             AppLog.log("⏭️ FAST PATH: ringer already active", applicationContext)
                         } else {
                             AppLog.log("🚨 FAST PATH TRIGGER: $fastTitle", applicationContext)

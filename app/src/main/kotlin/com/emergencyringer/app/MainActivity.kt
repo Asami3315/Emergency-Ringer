@@ -127,13 +127,7 @@ class MainActivity : FragmentActivity() {
         EmergencyContactRepository.init(this)
         billingManager = BillingManager(this)
         
-        // --- DUMMY RECORDS FOR TESTING ---
-        EmergencyContactRepository.addTriggerRecord("Mom", "Emergency Contact (call)", this)
-        val nowMs = System.currentTimeMillis()
-        val mockPriors = listOf(nowMs - 120_000, nowMs - 60_000, nowMs)
-        EmergencyContactRepository.addTriggerRecord("+1 555-0199", "Repeated Caller (3×)", this, mockPriors)
-        // ---------------------------------
-        
+
         // Request phone state permission for call end detection
         // Android 13+ uses READ_BASIC_PHONE_STATE, older uses READ_PHONE_STATE
         val phonePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -148,7 +142,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             var showSplash by remember { mutableStateOf(true) }
             val prefs = remember { getSharedPreferences("emergency_ringer_intro", MODE_PRIVATE) }
-            var showIntro by remember { mutableStateOf(true) } // TEMP: always show for testing
+            var showIntro by remember { mutableStateOf(!prefs.getBoolean("intro_completed", false)) }
             
             // Premium state
             var showPaywall by remember { mutableStateOf(false) }

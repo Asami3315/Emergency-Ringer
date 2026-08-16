@@ -17,7 +17,7 @@ object EmergencyContactRepository {
     private const val KEY_PREMIUM = "is_premium"
 
     fun isPremium(context: Context): Boolean {
-        return true // Hardcoded for testing so user can access all premium features
+        return getPrefs(context).getBoolean(KEY_PREMIUM, false)
     }
 
     fun setPremium(context: Context, isPremium: Boolean) {
@@ -263,8 +263,17 @@ object EmergencyContactRepository {
     }
 
     // Auto-stop timer (in milliseconds)
+    private const val KEY_AUTO_STOP_ENABLED = "auto_stop_enabled"
     private const val KEY_AUTO_STOP_DURATION = "auto_stop_duration"
     private const val DEFAULT_AUTO_STOP_MS = 120_000L  // 120 seconds (2 mins) to ensure it doesn't stop while WhatsApp is still ringing
+    
+    fun setAutoStopEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_AUTO_STOP_ENABLED, enabled).apply()
+    }
+    
+    fun isAutoStopEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_AUTO_STOP_ENABLED, false) // Default OFF
+    }
     
     fun setAutoStopDuration(context: Context, durationMs: Long) {
         getPrefs(context).edit().putLong(KEY_AUTO_STOP_DURATION, durationMs).apply()
