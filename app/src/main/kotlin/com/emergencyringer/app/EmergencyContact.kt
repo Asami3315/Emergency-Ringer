@@ -17,7 +17,7 @@ object EmergencyContactRepository {
     private const val KEY_PREMIUM = "is_premium"
 
     fun isPremium(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_PREMIUM, false)
+        return true // Hardcoded for testing so user can access all premium features
     }
 
     fun setPremium(context: Context, isPremium: Boolean) {
@@ -42,7 +42,8 @@ object EmergencyContactRepository {
     data class CallRecord(
         val callerName: String,
         val reason: String,         // "Emergency Contact" or "Repeated Caller (3×)"
-        val timestampMs: Long = System.currentTimeMillis()
+        val timestampMs: Long = System.currentTimeMillis(),
+        val priorTimestamps: List<Long> = emptyList()
     ) {
         val timeLabel: String get() =
             SimpleDateFormat("hh:mm a, dd MMM", Locale.getDefault()).format(Date(timestampMs))
@@ -74,19 +75,35 @@ object EmergencyContactRepository {
             ?.count { now - it <= windowMs } ?: 0
     }
 
+    /** Returns the exact timestamps of recent calls from [callerKey] within the window. */
+    fun getRecentCallTimestamps(context: Context, callerKey: String): List<Long> {
+        val now = System.currentTimeMillis()
+        val windowMs = getRepeatedCallWindowMs(context)
+        return recentCallTimestamps[callerKey]
+            ?.filter { now - it <= windowMs } ?: emptyList()
+    }
+
     /** Trigger history shown in Recent Triggers UI (max 50 entries, persisted). */
     private val triggerHistory: MutableList<CallRecord> = mutableListOf()
     private var historyLoaded = false
     private const val KEY_TRIGGER_HISTORY = "trigger_history"
 
     /** Serialize a CallRecord to a storable string. */
-    private fun CallRecord.serialize() = "$callerName\t$reason\t$timestampMs"
+    private fun CallRecord.serialize(): String {
+        val priors = if (priorTimestamps.isEmpty()) "" else priorTimestamps.joinToString(",")
+        return "$callerName\t$reason\t$timestampMs\t$priors"
+    }
 
     /** Deserialize a CallRecord from a stored string. */
     private fun deserializeRecord(s: String): CallRecord? {
         val parts = s.split("\t")
         if (parts.size < 3) return null
-        return CallRecord(parts[0], parts[1], parts[2].toLongOrNull() ?: return null)
+        val priors = if (parts.size >= 4 && parts[3].isNotEmpty()) {
+            parts[3].split(",").mapNotNull { it.toLongOrNull() }
+        } else {
+            emptyList()
+        }
+        return CallRecord(parts[0], parts[1], parts[2].toLongOrNull() ?: return null, priors)
     }
 
     /** Load history from SharedPreferences into memory (once per session). */
@@ -106,10 +123,10 @@ object EmergencyContactRepository {
     }
 
     /** Add a trigger event to the history (shown in Recent Triggers screen). */
-    fun addTriggerRecord(callerName: String, reason: String, context: android.content.Context? = null) {
+    fun addTriggerRecord(callerName: String, reason: String, context: android.content.Context? = null, priorTimestamps: List<Long> = emptyList()) {
         synchronized(triggerHistory) {
             context?.let { ensureHistoryLoaded(it) }
-            triggerHistory.add(0, CallRecord(callerName, reason))
+            triggerHistory.add(0, CallRecord(callerName, reason, System.currentTimeMillis(), priorTimestamps))
             if (triggerHistory.size > 50) triggerHistory.removeLastOrNull()
             context?.let { saveHistory(it) }
         }
@@ -181,6 +198,17 @@ object EmergencyContactRepository {
         return getPrefs(context).getBoolean(KEY_MONITORING_ENABLED, true) // Default enabled
     }
     
+    // Quick Settings Tile status tracking
+    private const val KEY_TILE_ADDED = "qs_tile_added"
+
+    fun setTileAdded(context: Context, added: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_TILE_ADDED, added).apply()
+    }
+
+    fun isTileAdded(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_TILE_ADDED, false)
+    }
+    
     // Custom ringtone
     private const val KEY_RINGTONE_URI = "ringtone_uri"
     private const val KEY_RINGTONE_SOURCE = "ringtone_source"
@@ -236,7 +264,7 @@ object EmergencyContactRepository {
 
     // Auto-stop timer (in milliseconds)
     private const val KEY_AUTO_STOP_DURATION = "auto_stop_duration"
-    private const val DEFAULT_AUTO_STOP_MS = 30_000L  // 30 seconds
+    private const val DEFAULT_AUTO_STOP_MS = 120_000L  // 120 seconds (2 mins) to ensure it doesn't stop while WhatsApp is still ringing
     
     fun setAutoStopDuration(context: Context, durationMs: Long) {
         getPrefs(context).edit().putLong(KEY_AUTO_STOP_DURATION, durationMs).apply()
@@ -350,16 +378,6 @@ object EmergencyContactRepository {
     fun isEscalatingVolumeEnabled(context: Context): Boolean {
         return getPrefs(context).getBoolean(KEY_ESCALATING_ALARM, false)
     }
-
-    // Biometric Unlock
-    private const val KEY_BIOMETRIC_UNLOCK = "biometric_unlock"
-    fun setBiometricUnlockEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_BIOMETRIC_UNLOCK, enabled).apply()
-    }
-    fun isBiometricUnlockEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_BIOMETRIC_UNLOCK, false)
-    }
-
     // Bedtime Schedule
     private const val KEY_SCHEDULE_ENABLED = "schedule_enabled"
     private const val KEY_SCHEDULE_START = "schedule_start"
@@ -383,6 +401,8 @@ object EmergencyContactRepository {
     fun getScheduleEnd(context: Context): String {
         return getPrefs(context).getString(KEY_SCHEDULE_END, "07:00") ?: "07:00"
     }
+
+
 
     /**
      * Checks if the app should monitor calls right now.

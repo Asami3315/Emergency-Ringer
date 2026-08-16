@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.telephony.TelephonyManager
 import android.util.Log
+import android.media.AudioManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -41,6 +42,15 @@ class CallReceiver : BroadcastReceiver() {
                     return
                 }
 
+                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+                val isDnd = nm?.currentInterruptionFilter != android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+                val isSilent = am?.ringerMode != AudioManager.RINGER_MODE_NORMAL
+                if (!isDnd && !isSilent) {
+                    AppLog.log("⏸️ [CallReceiver] Phone is not in Silent/DND, skipping alarm", context)
+                    return
+                }
+
                 // Cooldown to prevent double-trigger
                 val now = System.currentTimeMillis()
                 if (now - lastReceiverTriggerTime < TRIGGER_COOLDOWN_MS) {
@@ -51,6 +61,11 @@ class CallReceiver : BroadcastReceiver() {
                 val whitelist = EmergencyContactRepository.getWhitelistSync(context)
                 if (whitelist.isEmpty()) {
                     AppLog.log("📋 [CallReceiver] No emergency contacts set", context)
+                    return
+                }
+
+                if (!RingerManager.isPhoneSilentOrDnd(context)) {
+                    AppLog.log("⏸️ [CallReceiver] Phone not in Silent/DND, skipping emergency ringer", context)
                     return
                 }
 
@@ -88,7 +103,8 @@ class CallReceiver : BroadcastReceiver() {
                                 && EmergencyContactRepository.isCurrentlyActive(context)) {
                                 AppLog.log("🚨 [CallReceiver] REPEATED CALLER $callCount×: $incomingNumber", context)
                                 lastReceiverTriggerTime = System.currentTimeMillis()
-                                EmergencyContactRepository.addTriggerRecord(incomingNumber, "Repeated Caller (${callCount}×)", context)
+                                val priors = EmergencyContactRepository.getRecentCallTimestamps(context, incomingNumber)
+                                EmergencyContactRepository.addTriggerRecord(incomingNumber, "Repeated Caller (${callCount}×)", context, priors)
                                 EmergencyContactRepository.resetCallCount(incomingNumber)
                                 RingerManager.triggerEmergencyRinger(context)
                             }
@@ -104,16 +120,14 @@ class CallReceiver : BroadcastReceiver() {
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 if (EmergencyContactRepository.isRingerPlaying) {
                     AppLog.log("📵 [CallReceiver] IDLE — stopping ringer", context)
-                    RingerManager.stopCurrentRinger()
-                    RingerManager.restoreAudioState(context)
+                    RingerManager.stopCurrentRinger(context)
                 }
             }
 
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 if (EmergencyContactRepository.isRingerPlaying) {
                     AppLog.log("📞 [CallReceiver] OFFHOOK — stopping ringer", context)
-                    RingerManager.stopCurrentRinger()
-                    RingerManager.restoreAudioState(context)
+                    RingerManager.stopCurrentRinger(context)
                 }
             }
         }

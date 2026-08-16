@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -75,7 +76,6 @@ fun SettingsScreen(
     var scheduleEnabled by remember { mutableStateOf(EmergencyContactRepository.isScheduleEnabled(context)) }
     var scheduleStart by remember { mutableStateOf(EmergencyContactRepository.getScheduleStart(context)) }
     var scheduleEnd by remember { mutableStateOf(EmergencyContactRepository.getScheduleEnd(context)) }
-    var biometricEnabled by remember { mutableStateOf(EmergencyContactRepository.isBiometricUnlockEnabled(context)) }
 
     val showTimePicker = { initialTime: String, onTimeSelected: (String) -> Unit ->
         val parts = initialTime.split(":")
@@ -167,6 +167,14 @@ fun SettingsScreen(
                     onToggle = onMonitoringToggle
                 )
 
+                // ── Permissions card (System Control) ─────────────
+                SttPermissionsCard(
+                    hasNotificationAccess = hasNotificationAccess,
+                    isBatteryOptDisabled  = isBatteryOptDisabled,
+                    onRequestNotification = onRequestNotification,
+                    onRequestBattery      = onRequestBattery
+                )
+
                 // ── Message Alerts ────────────────────────────
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -211,13 +219,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // ── Permissions card (below Message Alerts) ─────
-                SttPermissionsCard(
-                    hasNotificationAccess = hasNotificationAccess,
-                    isBatteryOptDisabled  = isBatteryOptDisabled,
-                    onRequestNotification = onRequestNotification,
-                    onRequestBattery      = onRequestBattery
-                )
+
 
                 // ── Alarm Configuration ───────────────────────
                 NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
@@ -327,6 +329,8 @@ fun SettingsScreen(
                             }
                         )
 
+
+
                         // Flashlight toggle
                         NeoToggleRow(
                             icon = Icons.Default.FlashlightOn,
@@ -338,24 +342,28 @@ fun SettingsScreen(
                             }
                         )
 
-                        // Escalating Volume
-                        NeoToggleRow(
-                            icon = Icons.Default.TrendingUp,
-                            label = "Escalating Volume",
-                            checked = escalatingEnabled,
-                            onCheckedChange = {
-                                escalatingEnabled = it
-                                EmergencyContactRepository.setEscalatingVolumeEnabled(context, it)
-                            }
-                        )
                     }
                 }
 
                 // ── Audio Output ──────────────────────────────
                 var selectedVolume by remember { mutableStateOf(EmergencyContactRepository.getVolumePercent(context)) }
                 var previousVolume by remember { mutableStateOf(100) }
-                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // ── Blurred content (full card) ───────────────
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(28.dp),
+                        modifier = Modifier
+                            .then(if (!isPremium) Modifier.blur(2.5.dp) else Modifier)
+                            .padding(28.dp)
+                    ) {
                         // Section header
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -389,11 +397,9 @@ fun SettingsScreen(
                                             return@clickable
                                         }
                                         if (isMuted) {
-                                            // Unmute → restore to 100%
                                             selectedVolume = 100
                                             EmergencyContactRepository.setVolumePercent(context, 100)
                                         } else {
-                                            // Mute → set to 0
                                             previousVolume = selectedVolume
                                             selectedVolume = 0
                                             EmergencyContactRepository.setVolumePercent(context, 0)
@@ -404,18 +410,18 @@ fun SettingsScreen(
 
                         // ── Volume display + bars ─────────────────
                         val volumeLevels = listOf(40, 60, 75, 90, 100)
-                        // Map stored volume to closest bar index (-1 when muted/0)
                         val activeIndex = if (selectedVolume == 0) -1 else volumeLevels.indexOfFirst { it >= selectedVolume }.let { if (it == -1) 4 else it }
 
                         Column {
-                            // Interactive volume bars
                             val barFractions = listOf(0.40f, 0.60f, 0.75f, 0.90f, 1.00f)
                             Row(
-                                modifier = Modifier.fillMaxWidth().height(140.dp).padding(horizontal = 4.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(140.dp)
+                                    .padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                // Frosted glass circle with %
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.align(Alignment.CenterVertically)) {
                                     Box(
                                         modifier = Modifier
@@ -446,15 +452,11 @@ fun SettingsScreen(
                                                 indication = null,
                                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                                             ) {
-                                                if (!isPremium) {
-                                                    onShowPaywall()
-                                                    return@clickable
-                                                }
+                                                if (!isPremium) { onShowPaywall(); return@clickable }
                                                 selectedVolume = volumeLevels[index]
                                                 EmergencyContactRepository.setVolumePercent(context, volumeLevels[index])
                                             }
                                     ) {
-                                        // The bar itself
                                         Box(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
@@ -473,20 +475,15 @@ fun SettingsScreen(
 
                             if (activeIndex >= 0 && volumeLevels[activeIndex] >= 90) {
                                 Box(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterHorizontally)
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
                                 ) {
-                                    // Lock icon above the box
                                     Icon(
                                         Icons.Default.Lock,
                                         contentDescription = "Premium Feature",
                                         tint = NeoPrimary,
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .align(Alignment.TopCenter)
+                                        modifier = Modifier.size(20.dp).align(Alignment.TopCenter)
                                     )
                                     Spacer(Modifier.height(8.dp))
-                                    // Max Intensity box below the lock
                                     Box(
                                         modifier = Modifier
                                             .background(Color(0xFFFFFBEB), RoundedCornerShape(50.dp))
@@ -516,14 +513,23 @@ fun SettingsScreen(
                             )
                         }
 
+                        // Escalating Volume
+                        NeoToggleRow(
+                            icon = Icons.Default.TrendingUp,
+                            label = "Escalating Volume",
+                            checked = escalatingEnabled,
+                            onCheckedChange = {
+                                escalatingEnabled = it
+                                EmergencyContactRepository.setEscalatingVolumeEnabled(context, it)
+                            }
+                        )
+
                         // ── System Setup (inline selector) ───────────
                         val isPhone = ringtoneSource == EmergencyContactRepository.RINGTONE_SOURCE_PHONE
                         var systemExpanded by remember { mutableStateOf(false) }
 
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -531,7 +537,6 @@ fun SettingsScreen(
                                 Text("PREFERENCES", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = NeoMutedC, letterSpacing = 1.sp)
                             }
 
-                            // Currently selected option (tap to expand)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -541,8 +546,8 @@ fun SettingsScreen(
                                     .clickable(
                                         indication = null,
                                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                    ) { 
-                                        if (!isPremium) onShowPaywall() else systemExpanded = !systemExpanded 
+                                    ) {
+                                        if (!isPremium) onShowPaywall() else systemExpanded = !systemExpanded
                                     }
                                     .padding(horizontal = 18.dp, vertical = 14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -569,7 +574,6 @@ fun SettingsScreen(
                                 )
                             }
 
-                            // Inline options (only the OTHER option shown)
                             androidx.compose.animation.AnimatedVisibility(visible = systemExpanded) {
                                 Row(
                                     modifier = Modifier
@@ -599,14 +603,12 @@ fun SettingsScreen(
                                         contentDescription = null, tint = NeoMutedC, modifier = Modifier.size(20.dp)
                                     )
                                     Text(
-                                        if (isPhone) "Custom Sound" else "System Ringtone",
+                                        if (isPhone) "Custom Sound" else "Default App Ringtone",
                                         fontSize = 15.sp, fontWeight = FontWeight.Medium, color = NeoTextC
                                     )
                                 }
                             }
 
-
-                            // Change + Preview buttons (stacked, full width like dropdown)
                             androidx.compose.animation.AnimatedVisibility(visible = !isPhone) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
@@ -638,12 +640,57 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                    }
-                }
+                        } // end Column (blurred)
+
+                        // ── Lock overlay (only for non-premium) ────────
+                        if (!isPremium) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(Color.White.copy(alpha = 0.35f))
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) { onShowPaywall() }
+                                    .padding(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = "Premium Feature",
+                                    tint = NeoPrimary,
+                                    modifier = Modifier.size(52.dp)
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "Upgrade to premium for access",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeoTextC,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } // end outer Box
+
 
                 // ── Repeated Callers Configuration ───────────────────
-                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        modifier = Modifier
+                            .then(if (!isPremium) Modifier.blur(2.5.dp) else Modifier)
+                            .padding(28.dp)
+                    ) {
                         Text(
                             "REPEATED CALLERS",
                             fontSize = 11.sp,
@@ -686,11 +733,43 @@ fun SettingsScreen(
                             )
                         }
                     }
+
+                    if (!isPremium) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.White.copy(alpha = 0.35f))
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                ) { onShowPaywall() }
+                                .padding(24.dp)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(52.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Text("Upgrade to premium for access", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = NeoTextC, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
+                    }
                 }
 
                 // ── Bedtime Schedule ──────────────────────────────
-                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(20.dp, RoundedCornerShape(28.dp), spotColor = Color.Black.copy(alpha = 0.07f))
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                        .background(Color.White.copy(alpha = 0.90f), RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        modifier = Modifier
+                            .then(if (!isPremium) Modifier.blur(2.5.dp) else Modifier)
+                            .padding(28.dp)
+                    ) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "BEDTIME SCHEDULE",
@@ -735,31 +814,24 @@ fun SettingsScreen(
                             }
                         }
                     }
-                }
 
-                // ── Security ──────────────────────────────────────
-                NeoSettingsCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Text(
-                            "SECURITY",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = NeoMutedC.copy(alpha = 0.7f),
-                            letterSpacing = 2.sp
-                        )
-
-                        NeoToggleRow(
-                            icon = Icons.Default.Fingerprint,
-                            label = "Biometric Unlock",
-                            checked = biometricEnabled,
-                            isPremiumLocked = !isPremium,
-                            onPremiumRequired = onShowPaywall,
-                            onCheckedChange = {
-                                biometricEnabled = it
-                                EmergencyContactRepository.setBiometricUnlockEnabled(context, it)
-                            }
-                        )
-                        Text("When active, fingerprint or face authentication will be required to stop the ringing alarm.", fontSize = 11.sp, color = NeoMutedC)
+                    if (!isPremium) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.White.copy(alpha = 0.35f))
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                ) { onShowPaywall() }
+                                .padding(24.dp)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = "Premium Feature", tint = NeoPrimary, modifier = Modifier.size(52.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Text("Upgrade to premium for access", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = NeoTextC, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        }
                     }
                 }
 
@@ -1102,6 +1174,7 @@ private fun SttPermissionsCard(
 ) {
     val readyCount = listOf(hasNotificationAccess, isBatteryOptDisabled).count { it }
     var expanded by remember { mutableStateOf(readyCount < 2) }
+    var showInfoDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier.fillMaxWidth()
@@ -1154,6 +1227,19 @@ private fun SttPermissionsCard(
                                 .background(Color(0xFFFED7D7).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                                 .padding(horizontal = 8.dp, vertical = 4.dp))
                     }
+                    
+                    IconButton(
+                        onClick = { showInfoDialog = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Info",
+                            tint = NeoMutedC,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     Icon(
                         if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = null,
@@ -1186,6 +1272,58 @@ private fun SttPermissionsCard(
                 }
             }
         }
+    }
+
+    if (showInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            title = {
+                Text("Why do we need access?", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = NeoTextC)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "To guarantee you never miss an emergency call, Alert App needs special Android permissions:",
+                        fontSize = 14.sp, color = NeoTextC
+                    )
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🔔 Notification Access", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = NeoTextC)
+                        Text(
+                            "Required to instantly detect when an emergency contact is calling you. We do not read your private messages or texts.",
+                            fontSize = 14.sp, color = NeoMutedC
+                        )
+                    }
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🔋 Battery Optimization", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = NeoTextC)
+                        Text(
+                            "Android puts background apps to sleep to save battery. To ensure the alarm works 24/7, you must let Alert App run in the background.",
+                            fontSize = 14.sp, color = NeoMutedC
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(NeoPrimary.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            "How to allow:\nTap the permission, find 'Alert App' in the list, and turn the switch ON.",
+                            fontSize = 13.sp, color = NeoPrimary, fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showInfoDialog = false }) {
+                    Text("Got it", fontWeight = FontWeight.Bold, color = NeoPrimary)
+                }
+            },
+            containerColor = SttCard,
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }
 

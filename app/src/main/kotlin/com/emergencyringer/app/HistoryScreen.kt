@@ -495,6 +495,33 @@ fun HistoryScreen() {
                                                      color = WMuted.copy(alpha = 0.6f)
                                                  )
                                              }
+                                             
+                                             if (record.priorTimestamps.isNotEmpty()) {
+                                                 Spacer(Modifier.height(12.dp))
+                                                 Text("Call Timeline", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WText.copy(alpha = 0.8f))
+                                                 Spacer(Modifier.height(4.dp))
+                                                 record.priorTimestamps.forEachIndexed { index, ts ->
+                                                     Row(
+                                                         modifier = Modifier.padding(vertical = 2.dp),
+                                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                         verticalAlignment = Alignment.CenterVertically
+                                                     ) {
+                                                         Icon(Icons.Default.Phone, null, tint = WMuted.copy(alpha = 0.5f), modifier = Modifier.size(12.dp))
+                                                         val isTrigger = index == record.priorTimestamps.lastIndex
+                                                         Text(
+                                                             "Call ${index + 1}${if (isTrigger) " (Trigger)" else ""}:",
+                                                             fontSize = 12.sp,
+                                                             fontWeight = if (isTrigger) FontWeight.Bold else FontWeight.Medium,
+                                                             color = if (isTrigger) Color(0xFFF16558) else WMuted.copy(alpha = 0.8f)
+                                                         )
+                                                         Text(
+                                                             timeFormat.format(Date(ts)),
+                                                             fontSize = 12.sp,
+                                                             color = WMuted
+                                                         )
+                                                     }
+                                                 }
+                                             }
                                          }
                                      }
                                  }

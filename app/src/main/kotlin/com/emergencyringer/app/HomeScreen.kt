@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.blur
 import com.emergencyringer.app.magneticAffinity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
 
 // ── Design tokens matching Stitch HTML ──────────────────────
 val NeoYellow       = Color(0xFFFFB703)
@@ -60,6 +62,7 @@ fun HomeScreen(
     onMonitoringToggle: (Boolean) -> Unit,
     onAddContact: () -> Unit,
     onRemoveContact: (String, String) -> Unit,
+    isPremium: Boolean = false,
 ) {
     val allPermsReady = hasNotificationAccess && hasDndAccess && hasContactsPermission && isBatteryOptDisabled
 
@@ -128,7 +131,100 @@ fun HomeScreen(
                     onToggle = onMonitoringToggle
                 )
 
+                // ── Quick Settings Tip ────────────────────────
+                val context = LocalContext.current
+                var isTileAdded by remember { mutableStateOf(EmergencyContactRepository.isTileAdded(context)) }
+                
+                // Continuous background check & resume check
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        isTileAdded = EmergencyContactRepository.isTileAdded(context)
+                        kotlinx.coroutines.delay(800)
+                    }
+                }
+                val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            isTileAdded = EmergencyContactRepository.isTileAdded(context)
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
 
+                if (!isTileAdded) {
+                    var showTileInfo by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(0.04f))
+                            .background(Color.White, RoundedCornerShape(16.dp))
+                            .clickable { showTileInfo = true }
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(NeoYellow.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(painter = painterResource(id = R.drawable.ic_clock), contentDescription = null, tint = NeoYellowDark, modifier = Modifier.size(22.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Quick Settings Toggle", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeoText)
+                                Text("Turn on/off instantly without opening the app", fontSize = 12.sp, color = NeoMuted)
+                            }
+                            IconButton(
+                                onClick = {
+                                    isTileAdded = true
+                                    EmergencyContactRepository.setTileAdded(context, true)
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = NeoMuted.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    if (showTileInfo) {
+                        AlertDialog(
+                            onDismissRequest = { showTileInfo = false },
+                            title = { Text("Quick Settings Tile", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = NeoText) },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("You can add Alert App to your Android drop-down menu for instant access!", fontSize = 14.sp, color = NeoText)
+                                    Text("1. Swipe down twice from the top of your screen.", fontSize = 14.sp, color = NeoMuted)
+                                    Text("2. Tap the 'Edit' (pencil) icon.", fontSize = 14.sp, color = NeoMuted)
+                                    Text("3. Find 'Alert App' and drag it up to your active tiles.", fontSize = 14.sp, color = NeoMuted)
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showTileInfo = false
+                                    isTileAdded = true
+                                    EmergencyContactRepository.setTileAdded(context, true)
+                                }) {
+                                    Text("Got it!", fontWeight = FontWeight.Bold, color = NeoYellowDark)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showTileInfo = false }) {
+                                    Text("Close", color = NeoMuted)
+                                }
+                            },
+                            containerColor = NeoCard,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                    }
+                }
 
                 // ── Priority Contacts ─────────────────────────
                 Row(
@@ -166,7 +262,10 @@ fun HomeScreen(
                                     val globalIdx = items.indexOf(contact)
                                     Box(modifier = Modifier.weight(1f)) {
                                         if (contact == null) {
-                                            AddContactCard(onAddContact = onAddContact)
+                                            AddContactCard(
+                                                onAddContact = onAddContact,
+                                                isLocked = !isPremium && contacts.size >= 4
+                                            )
                                         } else {
                                             ContactCard(
                                                 contact = contact,
@@ -437,7 +536,7 @@ private fun ContactCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddContactCard(onAddContact: () -> Unit) {
+private fun AddContactCard(onAddContact: () -> Unit, isLocked: Boolean = false) {
     val borderColor = Color(0xFFD6CBC2)
     val textColor = Color(0xFF6B5E55)
     
@@ -467,7 +566,8 @@ private fun AddContactCard(onAddContact: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.then(if (isLocked) Modifier.blur(2.5.dp) else Modifier)
         ) {
             Box(
                 modifier = Modifier
@@ -478,29 +578,41 @@ private fun AddContactCard(onAddContact: () -> Unit) {
                 Icon(
                     Icons.Default.Add, 
                     contentDescription = null, 
-                    tint = NeoYellow, 
-                    modifier = Modifier.size(28.dp)
+                    tint = textColor.copy(alpha = 0.7f), 
+                    modifier = Modifier.size(32.dp)
                 )
             }
-            Spacer(Modifier.height(20.dp))
-            Text(
-                "Add New", 
-                fontSize = 18.sp, 
-                fontWeight = FontWeight.Bold, 
-                color = NeoText
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Invite members to stay connected", 
-                fontSize = 12.sp, 
-                fontWeight = FontWeight.Medium, 
-                color = textColor,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            Spacer(Modifier.height(16.dp))
+            Text("Add Person", color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+
+        if (isLocked) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.White.copy(alpha = 0.35f))
+            ) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = "Premium Feature",
+                    tint = NeoYellow,
+                    modifier = Modifier.size(42.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Upgrade to\npremium",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = NeoText,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

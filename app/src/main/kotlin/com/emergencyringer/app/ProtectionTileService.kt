@@ -8,11 +8,23 @@ class ProtectionTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        EmergencyContactRepository.setTileAdded(applicationContext, true)
         updateTileState()
+    }
+
+    override fun onTileAdded() {
+        super.onTileAdded()
+        EmergencyContactRepository.setTileAdded(applicationContext, true)
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        EmergencyContactRepository.setTileAdded(applicationContext, false)
     }
 
     override fun onClick() {
         super.onClick()
+        EmergencyContactRepository.setTileAdded(applicationContext, true)
         
         // Toggle monitoring state
         val context = applicationContext

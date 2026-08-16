@@ -13,8 +13,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.fragment.app.FragmentActivity
-import androidx.biometric.BiometricPrompt
-import java.util.concurrent.Executor
+
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -128,6 +127,13 @@ class MainActivity : FragmentActivity() {
         EmergencyContactRepository.init(this)
         billingManager = BillingManager(this)
         
+        // --- DUMMY RECORDS FOR TESTING ---
+        EmergencyContactRepository.addTriggerRecord("Mom", "Emergency Contact (call)", this)
+        val nowMs = System.currentTimeMillis()
+        val mockPriors = listOf(nowMs - 120_000, nowMs - 60_000, nowMs)
+        EmergencyContactRepository.addTriggerRecord("+1 555-0199", "Repeated Caller (3×)", this, mockPriors)
+        // ---------------------------------
+        
         // Request phone state permission for call end detection
         // Android 13+ uses READ_BASIC_PHONE_STATE, older uses READ_PHONE_STATE
         val phonePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -184,28 +190,7 @@ class MainActivity : FragmentActivity() {
                         RingerManager.triggerEmergencyRinger(this@MainActivity)
                     },
                     onStopRinger = {
-                        if (EmergencyContactRepository.isBiometricUnlockEnabled(this@MainActivity)) {
-                            val executor: Executor = ContextCompat.getMainExecutor(this@MainActivity)
-                            val biometricPrompt = BiometricPrompt(this@MainActivity, executor,
-                                object : BiometricPrompt.AuthenticationCallback() {
-                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                        super.onAuthenticationSucceeded(result)
-                                        RingerManager.stopCurrentRinger()
-                                    }
-                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                                        super.onAuthenticationError(errorCode, errString)
-                                        Toast.makeText(this@MainActivity, "Authentication error: $errString", Toast.LENGTH_SHORT).show()
-                                    }
-                                })
-                            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                                .setTitle("Stop Emergency Alarm")
-                                .setSubtitle("Authenticate to stop the ringing")
-                                .setNegativeButtonText("Cancel")
-                                .build()
-                            biometricPrompt.authenticate(promptInfo)
-                        } else {
-                            RingerManager.stopCurrentRinger()
-                        }
+                        RingerManager.stopCurrentRinger(this@MainActivity)
                     },
                     onSelectRingtoneInSettings = {
                         val intent = Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -439,7 +424,8 @@ fun MainScreen(
                         onAddContact()
                     }
                 },
-                onRemoveContact           = onRemoveContact
+                onRemoveContact           = onRemoveContact,
+                isPremium                 = isPremium
             )
             1 -> HistoryScreen()
             2 -> SettingsScreen(

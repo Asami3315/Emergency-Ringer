@@ -57,21 +57,6 @@ fun PremiumScreen(
                 .background(Color.Black.copy(alpha = 0.2f))
         )
 
-        // Close Button (positioned outside scrollable content)
-        Box(
-            modifier = Modifier
-                .padding(top = 48.dp, end = 24.dp)
-                .size(48.dp)
-                .background(Color.White.copy(alpha = 0.3f), CircleShape)
-                .align(Alignment.TopEnd)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                ) { onClose() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
-        }
 
         Column(
             modifier = Modifier
@@ -163,6 +148,22 @@ fun PremiumScreen(
                 color = Color.White.copy(alpha = 0.7f),
                 fontWeight = FontWeight.Medium
             )
+        }
+
+        // Close Button (positioned outside scrollable content and drawn ON TOP)
+        Box(
+            modifier = Modifier
+                .padding(top = 48.dp, end = 24.dp)
+                .size(48.dp)
+                .background(Color.White.copy(alpha = 0.3f), CircleShape)
+                .align(Alignment.TopEnd)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) { onClose() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(24.dp))
         }
     }
 }

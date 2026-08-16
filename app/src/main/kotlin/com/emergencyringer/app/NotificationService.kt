@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioAttributes
+import android.content.Context
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.os.Build
@@ -87,8 +88,11 @@ class NotificationService : NotificationListenerService() {
         // false = phone went directly to OFFHOOK (outgoing call — do NOT trigger alarm)
         @Volatile
         var isCallIncoming: Boolean = false
+
+        @Volatile
+        var isCallOutgoing: Boolean = false
     }
-    
+
     // Phone state listener for call end detection
     private var phoneStateListener: PhoneStateListener? = null
     private var telephonyCallback: Any? = null  // TelephonyCallback for API 31+
@@ -133,6 +137,16 @@ class NotificationService : NotificationListenerService() {
         
         // Try to rebind
         requestRebind(android.content.ComponentName(this, NotificationService::class.java))
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.i(TAG, "⚠️ NotificationService onDestroy called - stopping alarm if active")
+        // Force stop ringer and restore audio state just in case the user force-killed the app while it was ringing!
+        if (EmergencyContactRepository.isRingerPlaying || ringerWasTriggered) {
+            ringerWasTriggered = false
+            RingerManager.stopCurrentRinger(applicationContext)
+        }
     }
     
     /**
@@ -223,11 +237,13 @@ class NotificationService : NotificationListenerService() {
             TelephonyManager.CALL_STATE_RINGING -> {
                 // Phone is ringing = this is an INCOMING call
                 isCallIncoming = true
+                isCallOutgoing = false
                 Log.i(TAG, "📲 Incoming call detected")
             }
             TelephonyManager.CALL_STATE_OFFHOOK -> {
                 // If we never went through RINGING, user is MAKING a call (outgoing)
                 if (!isCallIncoming) {
+                    isCallOutgoing = true
                     Log.i(TAG, "📤 Outgoing call — alarm will be suppressed")
                     AppLog.log("📤 Outgoing call — alarm suppressed", applicationContext)
                 }
@@ -236,7 +252,7 @@ class NotificationService : NotificationListenerService() {
                     Log.i(TAG, "✅ Call answered — stopping alarm")
                     AppLog.log("✅ Call answered — stopping alarm", applicationContext)
                     ringerWasTriggered = false
-                    RingerManager.stopCurrentRinger()
+                    RingerManager.stopCurrentRinger(applicationContext)
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
@@ -245,10 +261,11 @@ class NotificationService : NotificationListenerService() {
                     Log.i(TAG, "📵 Call IDLE — stopping alarm")
                     AppLog.log("📵 Call ended — stopping alarm", applicationContext)
                     ringerWasTriggered = false
-                    RingerManager.stopCurrentRinger()
+                    RingerManager.stopCurrentRinger(applicationContext)
                 }
-                // Reset incoming flag ready for next call
+                // Reset flags ready for next call
                 isCallIncoming = false
+                isCallOutgoing = false
             }
         }
     }
@@ -262,35 +279,138 @@ class NotificationService : NotificationListenerService() {
 
         // ══════════════════════════════════════════════════════════════════
         // ⚡ FAST PATH — runs FIRST before anything else.
-        // CATEGORY_CALL + title matches emergency contact = trigger immediately.
-        // Bypasses isCallIncoming check (which blocks WhatsApp VoIP on MIUI).
-        // This is the code that worked at 15:22:15.
+        // Detects incoming call notifications and triggers immediately.
+        // 
+        // CRITICAL: MIUI/HyperOS on Xiaomi/Redmi/POCO strips CATEGORY_CALL
+        // from WhatsApp notifications, so we CANNOT rely on it alone.
+        // We also enter the Fast Path for WhatsApp if the text looks like a call.
         // ══════════════════════════════════════════════════════════════════
         val fastNotif = sbn.notification
-        if (fastNotif != null && fastNotif.category == Notification.CATEGORY_CALL) {
+        val isWhatsApp = pkg.contains("whatsapp", ignoreCase = true)
+        
+        if (fastNotif != null) {
+            val isCategoryCall = fastNotif.category == Notification.CATEGORY_CALL
             val fastExtras = fastNotif.extras
             val fastTitle = fastExtras?.getCharSequence(NotificationCompat.EXTRA_TITLE)?.toString()?.trim() ?: ""
             val fastText  = fastExtras?.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString()?.trim() ?: ""
-            AppLog.log("⚡ FAST PATH: title='$fastTitle' text='$fastText'", applicationContext)
-            val isMissed = fastText.contains("missed", ignoreCase = true) || fastTitle.contains("missed", ignoreCase = true)
-            if (!isMissed && EmergencyContactRepository.isCurrentlyActive(applicationContext)) {
-                val wl = EmergencyContactRepository.getWhitelistedNames(applicationContext)
-                val hit = wl.any { ContactNormalizer.matches(it, fastTitle) || ContactNormalizer.matches(it, fastText) }
-                AppLog.log("⚡ whitelist=$wl match=$hit", applicationContext)
-                if (hit) {
-                    val now = System.currentTimeMillis()
-                    if (lastTriggeredCaller == fastTitle && (now - lastTriggerTime) < 60_000 && EmergencyContactRepository.isRingerPlaying) {
-                        AppLog.log("⏭️ FAST PATH: ringer already active", applicationContext)
-                    } else {
-                        AppLog.log("🚨 FAST PATH TRIGGER: $fastTitle", applicationContext)
-                        lastTriggeredCaller = fastTitle
-                        lastTriggerTime = now
-                        lastTriggerSbnKey = sbn.key
-                        ringerWasTriggered = true
-                        isCallIncoming = true
-                        EmergencyContactRepository.addTriggerRecord(fastTitle, "Emergency Contact", applicationContext)
-                        RingerManager.triggerEmergencyRinger(applicationContext)
+            
+            // On MIUI, WhatsApp call notifications arrive WITHOUT CATEGORY_CALL.
+            // Detect them by checking if the text mentions a call.
+            val textLower = fastText.lowercase()
+            val titleLower = fastTitle.lowercase()
+            val isWhatsAppCallByText = isWhatsApp && (
+                textLower.contains("incoming") ||
+                textLower.contains("voice call") ||
+                textLower.contains("video call") ||
+                textLower.contains("audio call") ||
+                textLower.contains("call from") ||
+                textLower.contains("calling") ||
+                textLower.contains("ringing") ||
+                textLower.contains("dialing") ||
+                textLower.contains("call") ||
+                // Non-English
+                textLower.contains("anruf") ||
+                textLower.contains("appel") ||
+                textLower.contains("llamada") ||
+                textLower.contains("مكالمة") ||
+                textLower.contains("कॉल") ||
+                textLower.contains("آنے والی")
+            )
+            
+            val shouldEnterFastPath = isCategoryCall || isWhatsAppCallByText
+            
+            if (shouldEnterFastPath) {
+                AppLog.log("⚡ FAST PATH: pkg=$pkg cat=${fastNotif.category} title='$fastTitle' text='$fastText'", applicationContext)
+                
+                // ── Outgoing Call Detection ──
+                // SIMPLE: If text is EXACTLY "Calling..." / "Ringing..." / "Dialing..." it's outgoing.
+                // Incoming calls say "Incoming voice call", "Incoming video call", etc.
+                val hasIncomingIndicator = textLower.contains("incoming") || 
+                                           textLower.contains("voice call") || 
+                                           textLower.contains("video call") ||
+                                           textLower.contains("audio call") ||
+                                           textLower.contains("call from") ||
+                                           textLower.contains("eingehender") ||
+                                           textLower.contains("appel entrant") ||
+                                           textLower.contains("llamada entrante") ||
+                                           textLower.contains("آنے والی")
+                                           
+                val hasOutgoingIndicator = textLower == "calling" || textLower == "calling..." || 
+                                           textLower == "ringing" || textLower == "ringing..." || 
+                                           textLower == "dialing" || textLower == "dialing..." ||
+                                           textLower.startsWith("dialing ")
+                
+                val hasGenericWhatsAppTitle = isWhatsApp && (
+                    titleLower.contains("whatsapp audio call") || 
+                    titleLower.contains("whatsapp video call") ||
+                    titleLower.contains("whatsapp voice call")
+                )
+                
+                val blockTelephonyOutgoing = isCallOutgoing && !isWhatsApp
+                
+                val isOutgoing = blockTelephonyOutgoing || 
+                                 (hasOutgoingIndicator && !hasIncomingIndicator) ||
+                                 hasGenericWhatsAppTitle
+
+                if (isOutgoing) {
+                    AppLog.log("📤 FAST PATH: Outgoing call blocked (text='$fastText')", applicationContext)
+                    return
+                }
+                
+                // If notification indicates ongoing/active call, stop the alarm.
+                val usesChronometer = fastExtras?.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false) ?: false
+                val isOngoing = usesChronometer || 
+                    textLower.contains("ongoing") || 
+                    textLower.contains("active") || 
+                    fastText.matches(Regex(".*\\d{2}:\\d{2}.*"))
+
+                if (isOngoing) {
+                    if (EmergencyContactRepository.isRingerPlaying) {
+                        Log.i(TAG, "✅ Ongoing call detected — stopping alarm")
+                        AppLog.log("✅ Ongoing call detected — stopping alarm", applicationContext)
+                        ringerWasTriggered = false
+                        RingerManager.stopCurrentRinger(applicationContext)
+                    }
+                    return
+                }
+                
+                val isMissed = textLower.contains("missed") || titleLower.contains("missed")
+                if (isMissed) {
+                    if (EmergencyContactRepository.isRingerPlaying) {
+                        Log.i(TAG, "📵 Missed call — stopping alarm")
+                        AppLog.log("📵 Missed call (declined) — stopping alarm", applicationContext)
+                        ringerWasTriggered = false
+                        RingerManager.stopCurrentRinger(applicationContext)
+                    }
+                    return
+                }
+                
+                // ── TRIGGER THE ALARM ──
+                if (EmergencyContactRepository.isCurrentlyActive(applicationContext)) {
+                    
+                    if (!RingerManager.isPhoneSilentOrDnd(applicationContext)) {
+                        AppLog.log("⏸️ [FastPath] Phone not in Silent/DND, skipping", applicationContext)
                         return
+                    }
+
+                    val wl = EmergencyContactRepository.getWhitelistedNames(applicationContext)
+                    val hit = wl.any { ContactNormalizer.matches(it, fastTitle) || ContactNormalizer.matches(it, fastText) }
+                    AppLog.log("⚡ whitelist=$wl match=$hit title='$fastTitle'", applicationContext)
+                    if (hit) {
+                        val now = System.currentTimeMillis()
+                        if (lastTriggeredCaller == fastTitle && (now - lastTriggerTime) < 60_000 && EmergencyContactRepository.isRingerPlaying) {
+                            AppLog.log("⏭️ FAST PATH: ringer already active", applicationContext)
+                        } else {
+                            AppLog.log("🚨 FAST PATH TRIGGER: $fastTitle", applicationContext)
+                            lastTriggeredCaller = fastTitle
+                            lastTriggerTime = now
+                            lastTriggerSbnKey = sbn.key
+                            ringerWasTriggered = true
+                            isCallIncoming = true
+                            EmergencyContactRepository.addTriggerRecord(fastTitle, "Emergency Contact", applicationContext)
+                            RingerManager.triggerEmergencyRinger(applicationContext)
+                            return
+                        }
                     }
                 }
             }
@@ -355,7 +475,12 @@ class NotificationService : NotificationListenerService() {
             combinedText.contains("missed", ignoreCase = true) ||
             title.contains("missed", ignoreCase = true)
         if (isMissedCall) {
-            Log.i(TAG, "⏭️ Skipping missed-call notification")
+            Log.i(TAG, "⏭️ Missed-call notification detected")
+            if (EmergencyContactRepository.isRingerPlaying) {
+                AppLog.log("📵 Missed call (declined) — stopping alarm", applicationContext)
+                ringerWasTriggered = false
+                RingerManager.stopCurrentRinger(applicationContext)
+            }
             return
         }
 
@@ -375,8 +500,29 @@ class NotificationService : NotificationListenerService() {
             return
         }
 
+        // Check if answered call
+        val usesChronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+        val isOngoingCallText = combinedText.contains("ongoing", ignoreCase = true) ||
+            combinedText.matches(Regex(".*\\d{2}:\\d{2}.*"))
+
+        if (usesChronometer || isOngoingCallText) {
+            Log.i(TAG, "✅ Ongoing call detected (answered) — stopping alarm")
+            AppLog.log("✅ Ongoing call detected — stopping alarm", applicationContext)
+            if (EmergencyContactRepository.isRingerPlaying) {
+                ringerWasTriggered = false
+                RingerManager.stopCurrentRinger(applicationContext)
+            }
+            return
+        }
+
         val callerText = "$title $text $bigText $subText"
         val callerName = title.ifBlank { text }.trim()
+
+        if (!RingerManager.isPhoneSilentOrDnd(applicationContext)) {
+            Log.i(TAG, "⏸️ Phone not in Silent/DND, skipping normal call path")
+            AppLog.log("⏸️ Phone not in Silent/DND, skipping", applicationContext)
+            return
+        }
 
         // Prevent re-triggering for the SAME call within 60 seconds ONLY if alarm is still ringing
         // (guards against the same notification being posted multiple times during one call)
@@ -421,7 +567,8 @@ class NotificationService : NotificationListenerService() {
             lastTriggerTime = currentTime
             lastTriggerSbnKey = sbn.key
             ringerWasTriggered = true
-            EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)", applicationContext)
+            val priors = EmergencyContactRepository.getRecentCallTimestamps(applicationContext, callerKey)
+            EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)", applicationContext, priors)
             // Reset count so they need 3 more calls to trigger again
             EmergencyContactRepository.resetCallCount(callerKey)
             RingerManager.triggerEmergencyRinger(applicationContext)
@@ -430,19 +577,23 @@ class NotificationService : NotificationListenerService() {
 
     /**
      * Stops the alarm when the EXACT notification that triggered it is removed.
-     * Key guard prevents the first call's removal from stopping the second call's alarm.
+     * Key guard prevents unrelated WhatsApp background notifications from stopping the alarm.
      */
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn == null) return
-        // Only act on the specific notification that triggered this alarm
-        if (sbn.key != lastTriggerSbnKey) return
         val ringerActive = EmergencyContactRepository.isRingerPlaying || ringerWasTriggered
         if (!ringerActive) return
-        Log.i(TAG, "📵 Trigger notification removed (${sbn.packageName}) - stopping alarm")
-        AppLog.log("📵 Notification removed - stopping alarm", applicationContext)
-        lastTriggerSbnKey = null
-        ringerWasTriggered = false
-        RingerManager.stopCurrentRinger()
+        
+        // ONLY stop if it's the EXACT notification that triggered the alarm.
+        // We do NOT check packageName because WhatsApp frequently posts and removes
+        // background/message notifications while a call is ringing, which would kill the alarm prematurely.
+        if (sbn.key == lastTriggerSbnKey && lastTriggerSbnKey != null) {
+            Log.i(TAG, "📵 Trigger notification removed (${sbn.packageName}) - stopping alarm")
+            AppLog.log("📵 Notification removed - stopping alarm", applicationContext)
+            lastTriggerSbnKey = null
+            ringerWasTriggered = false
+            RingerManager.stopCurrentRinger(applicationContext)
+        }
     }
 
     /**
@@ -476,6 +627,11 @@ class NotificationService : NotificationListenerService() {
 
         Log.i(TAG, "💬 MSG pkg=${sbn.packageName} cat=${notification.category} title='$title' text='$text'")
         AppLog.log("💬 MSG title='$title' text='$text'", applicationContext)
+
+        if (!RingerManager.isPhoneSilentOrDnd(applicationContext)) {
+            AppLog.log("⏸️ Phone not in Silent/DND, skipping message alert", applicationContext)
+            return
+        }
 
         // Match whitelist against combined sender info
         val whitelist = EmergencyContactRepository.getWhitelistedNames(applicationContext)
