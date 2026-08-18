@@ -844,7 +844,7 @@ fun SettingsScreen(
                         }
                         LinkRow(icon = Icons.Default.Policy, label = "Privacy Policy") {
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://emergencyringer.com/privacy"))
+                                android.net.Uri.parse("https://www.freeprivacypolicy.com/live/2fd01f3b-184b-4415-a383-c8e49eef766b"))
                             try { context.startActivity(intent) } catch (_: Exception) {}
                         }
                         LinkRow(icon = Icons.Default.Share, label = "Invite a Guardian") {
