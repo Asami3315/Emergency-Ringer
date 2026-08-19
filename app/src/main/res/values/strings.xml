@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Emergency Ringer</string>
+    <string name="app_name">KinLink</string>
 
     <!-- Permission Lab -->
     <string name="permission_notification_access">Notification Access</string>
