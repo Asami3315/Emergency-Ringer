@@ -63,6 +63,8 @@ object RingerManager {
     private var savedDndFilter: Int = -1
     private var savedRingVolume: Int = -1
     private var savedAlarmVolume: Int = -1
+    private var savedNotificationVolume: Int = -1
+    private var savedMusicVolume: Int = -1
 
     fun isPhoneSilentOrDnd(context: Context): Boolean {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -72,15 +74,20 @@ object RingerManager {
         return isDnd || isSilent
     }
 
+    @Synchronized
     fun triggerEmergencyRinger(
         context: Context,
         durationMs: Long? = null,
-        tempSoundType: String? = null
+        tempSoundType: String? = null,
+        isWhatsAppCall: Boolean = false
     ) {
         Log.i(TAG, "═══════════════════════════════════════")
         Log.i(TAG, "EMERGENCY RINGER TRIGGERED!")
         Log.i(TAG, "═══════════════════════════════════════")
         AppLog.log("🔔 EMERGENCY RINGER TRIGGERED!", context)
+        
+        // Stop any currently playing alarm BEFORE we save the audio state
+        stopCurrentRinger(context)
 
         try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -95,11 +102,12 @@ object RingerManager {
             try {
                 if (!EmergencyContactRepository.isRingerPlaying) {
                     savedRingVolume = am.getStreamVolume(AudioManager.STREAM_RING)
+                    savedNotificationVolume = am.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
                 }
                 am.setStreamVolume(AudioManager.STREAM_RING, 0, 0)
                 // Also mute NOTIFICATION stream (some OEMs route call audio here)
                 am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
-                AppLog.log("🔇 Ring+Notification pre-muted (saved ring vol: $savedRingVolume)", context)
+                AppLog.log("🔇 Ring+Notification pre-muted (saved ring=$savedRingVolume notif=$savedNotificationVolume)", context)
             } catch (e: Exception) {
                 AppLog.log("⚠️ Pre-mute failed: ${e.message}", context)
             }
@@ -190,9 +198,12 @@ object RingerManager {
                 
                 // Also max out MUSIC stream as backup (some custom ringtones use it)
                 am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+                if (!EmergencyContactRepository.isRingerPlaying) {
+                    savedMusicVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                }
                 val maxMusic = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 am.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
-                AppLog.log("🎵 Music vol = $maxMusic/$maxMusic", context)
+                AppLog.log("🎵 Music vol = $maxMusic/$maxMusic (saved=$savedMusicVolume)", context)
             } catch (e: Exception) {
                 AppLog.log("⚠️ Volume error: ${e.message}", context)
             }
@@ -201,7 +212,6 @@ object RingerManager {
             // ══════════════════════════════════════
             // STEP 4: Play alarm sound
             // ══════════════════════════════════════
-            stopCurrentRinger(context)
             val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             val wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "EmergencyRinger::WakeLock")
             wakeLock?.acquire(60_000)
@@ -336,7 +346,7 @@ object RingerManager {
             if (durationMs == null && EmergencyContactRepository.isFlashlightEnabled(context)) startFlashlight(context)
             
             // Start real-time call state watcher
-            if (durationMs == null) startCallStateWatcher(context)
+            if (durationMs == null) startCallStateWatcher(context, isWhatsAppCall)
             
             // Power Button: press to mute the alarm (screen off = stop)
             try {
@@ -376,12 +386,12 @@ object RingerManager {
      * Stops alarm as soon as the call is picked up (OFFHOOK) or ended (IDLE).
      * This is the most reliable approach on MIUI/Redmi where callbacks fail.
      */
-    private fun startCallStateWatcher(context: Context) {
+    private fun startCallStateWatcher(context: Context, isWhatsAppCall: Boolean) {
         callStateWatcherJob?.cancel()
         callStateWatcherJob = CoroutineScope(Dispatchers.Default).launch {
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-            AppLog.log("📞 Hardware/Call watcher started", context)
+            AppLog.log("📞 Hardware/Call watcher started (isWhatsApp=$isWhatsAppCall)", context)
             
             // Wait briefly for the call to fully establish before watching
             delay(2000)
@@ -390,14 +400,16 @@ object RingerManager {
             
             while (isActive && EmergencyContactRepository.isRingerPlaying) {
                 try {
-                    // Check call state
-                    @Suppress("DEPRECATION")
-                    val state = tm?.callState ?: TelephonyManager.CALL_STATE_IDLE
-                    if (state == TelephonyManager.CALL_STATE_IDLE ||
-                        state == TelephonyManager.CALL_STATE_OFFHOOK) {
-                        AppLog.log("📞 Watcher: call state=$state → stopping alarm", context)
-                        stopCurrentRinger(context)
-                        break
+                    // Check call state ONLY if it's NOT a WhatsApp call
+                    if (!isWhatsAppCall) {
+                        @Suppress("DEPRECATION")
+                        val state = tm?.callState ?: TelephonyManager.CALL_STATE_IDLE
+                        if (state == TelephonyManager.CALL_STATE_IDLE ||
+                            state == TelephonyManager.CALL_STATE_OFFHOOK) {
+                            AppLog.log("📞 Watcher: call state=$state → stopping alarm", context)
+                            stopCurrentRinger(context)
+                            break
+                        }
                     }
                     
                     // Check screen state (for Xiaomi/Redmi power button muting)
@@ -432,6 +444,7 @@ object RingerManager {
         }
     }
 
+    @Synchronized
     fun stopCurrentRinger(context: Context) {
         // Cancel any pending auto-stop timer
         stopRunnable?.let { stopHandler?.removeCallbacks(it) }
@@ -491,6 +504,7 @@ object RingerManager {
      * Restore the phone to its original ringer/DND state.
      * Call this after stopping the ringer.
      */
+    @Synchronized
     fun restoreAudioState(context: Context) {
         try {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -506,11 +520,23 @@ object RingerManager {
                     AppLog.log("🔊 Ring volume restored to $savedRingVolume", context)
                     savedRingVolume = -1
                 }
+                // Restore notification volume
+                if (savedNotificationVolume != -1) {
+                    am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, savedNotificationVolume, 0)
+                    AppLog.log("🔊 Notification volume restored to $savedNotificationVolume", context)
+                    savedNotificationVolume = -1
+                }
                 // Restore alarm volume
                 if (savedAlarmVolume != -1) {
                     am.setStreamVolume(AudioManager.STREAM_ALARM, savedAlarmVolume, 0)
                     AppLog.log("🔊 Alarm volume restored to $savedAlarmVolume", context)
                     savedAlarmVolume = -1
+                }
+                // Restore music volume
+                if (savedMusicVolume != -1) {
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, savedMusicVolume, 0)
+                    AppLog.log("🔊 Music volume restored to $savedMusicVolume", context)
+                    savedMusicVolume = -1
                 }
             }
         } catch (e: Exception) {

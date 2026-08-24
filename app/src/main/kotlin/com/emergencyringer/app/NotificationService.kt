@@ -427,7 +427,7 @@ class NotificationService : NotificationListenerService() {
                             ringerWasTriggered = true
                             isCallIncoming = true
                             EmergencyContactRepository.addTriggerRecord(fastTitle, "Emergency Contact", applicationContext)
-                            RingerManager.triggerEmergencyRinger(applicationContext)
+                            RingerManager.triggerEmergencyRinger(applicationContext, isWhatsAppCall = isWhatsApp)
                             return
                         }
                     }
@@ -568,7 +568,8 @@ class NotificationService : NotificationListenerService() {
             lastTriggerSbnKey = sbn.key  // store so onNotificationRemoved knows which to stop on
             ringerWasTriggered = true
             EmergencyContactRepository.addTriggerRecord(callerName, "Emergency Contact", applicationContext)
-            RingerManager.triggerEmergencyRinger(applicationContext)
+            val isWhatsApp = pkg.contains("whatsapp", ignoreCase = true)
+            RingerManager.triggerEmergencyRinger(applicationContext, isWhatsAppCall = isWhatsApp)
             return
         }
 
@@ -590,7 +591,8 @@ class NotificationService : NotificationListenerService() {
             EmergencyContactRepository.addTriggerRecord(callerName, "Repeated Caller (${callCount}×)", applicationContext, priors)
             // Reset count so they need 3 more calls to trigger again
             EmergencyContactRepository.resetCallCount(callerKey)
-            RingerManager.triggerEmergencyRinger(applicationContext)
+            val isWhatsApp = pkg.contains("whatsapp", ignoreCase = true)
+            RingerManager.triggerEmergencyRinger(applicationContext, isWhatsAppCall = isWhatsApp)
         }
     }
 
@@ -680,6 +682,8 @@ class NotificationService : NotificationListenerService() {
     private fun playMessageAlert() {
         try {
             val am = applicationContext.getSystemService(AUDIO_SERVICE) as AudioManager
+            // Save current alarm volume so we can restore it after the alert
+            val savedAlarmVol = am.getStreamVolume(AudioManager.STREAM_ALARM)
             // Use STREAM_ALARM — it bypasses DND on all Android versions including MIUI
             val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
@@ -695,6 +699,15 @@ class NotificationService : NotificationListenerService() {
             }
             rt?.play()
             Log.i(TAG, "🔔 Message alert sound played (ALARM stream)")
+            
+            // Restore alarm volume after the notification sound finishes (typically ~2 seconds)
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                kotlinx.coroutines.delay(3000)
+                try {
+                    am.setStreamVolume(AudioManager.STREAM_ALARM, savedAlarmVol, 0)
+                    Log.i(TAG, "🔊 Alarm volume restored to $savedAlarmVol after message alert")
+                } catch (_: Exception) {}
+            }
         } catch (e: Exception) {
             Log.e(TAG, "❌ playMessageAlert failed: ${e.message}")
         }
