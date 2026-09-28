@@ -9,7 +9,11 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
 
     private val billingClient: BillingClient = BillingClient.newBuilder(context)
         .setListener(this)
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .build()
+        )
         .build()
 
     companion object {
@@ -66,8 +70,9 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
             .setProductList(productList)
             .build()
 
-        billingClient.queryProductDetailsAsync(queryProductDetailsParams) { billingResult, productDetailsList ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && productDetailsList.isNotEmpty()) {
+        billingClient.queryProductDetailsAsync(queryProductDetailsParams) { billingResult, productDetailsResult ->
+            val productDetailsList = productDetailsResult.productDetailsList
+            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !productDetailsList.isNullOrEmpty()) {
                 val productDetails = productDetailsList.first()
                 val billingFlowParams = BillingFlowParams.newBuilder()
                     .setProductDetailsParamsList(

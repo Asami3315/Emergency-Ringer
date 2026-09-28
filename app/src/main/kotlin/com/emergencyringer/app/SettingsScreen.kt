@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -193,7 +194,7 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.Chat, 
+                                    Icons.AutoMirrored.Filled.Chat, 
                                     contentDescription = null, 
                                     tint = if (msgEnabled) Color(0xFFE67E22) else NeoMutedC, 
                                     modifier = Modifier.size(24.dp)
@@ -370,7 +371,7 @@ fun SettingsScreen(
                             // Mute toggle icon
                             val isMuted = selectedVolume == 0
                             Icon(
-                                if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = if (isMuted) "Unmute" else "Mute",
                                 tint = if (isMuted) NeoMutedC else NeoPrimary,
                                 modifier = Modifier
@@ -503,7 +504,7 @@ fun SettingsScreen(
 
                         // Escalating Volume
                         NeoToggleRow(
-                            icon = Icons.Default.TrendingUp,
+                            icon = Icons.AutoMirrored.Filled.TrendingUp,
                             label = "Escalating Volume",
                             checked = escalatingEnabled,
                             onCheckedChange = {

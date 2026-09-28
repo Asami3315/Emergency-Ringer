@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -566,10 +567,10 @@ private fun resolveStyle(reason: String): RowStyle = when {
     reason.contains("Emergency Contact", ignoreCase = true) ->
         RowStyle(WAccent, Color.White, Icons.Default.Favorite, BadgeCBg, BadgeCTxt, "CALL")
     reason.contains("Repeated", ignoreCase = true) ->
-        RowStyle(Color(0xFFFEF2F2), Color(0xFFF9A8A8), Icons.Default.CallMissed,
+        RowStyle(Color(0xFFFEF2F2), Color(0xFFF9A8A8), Icons.AutoMirrored.Filled.CallMissed,
             BadgeRBg, BadgeRTxt, "REPEATED")
     reason.contains("Message", ignoreCase = true) ->
-        RowStyle(Color(0xFFF0FDF4), Color(0xFF6EE7B7), Icons.Default.Message,
+        RowStyle(Color(0xFFF0FDF4), Color(0xFF6EE7B7), Icons.AutoMirrored.Filled.Message,
             BadgeMBg, BadgeMTxt, "MESSAGE")
     else ->
         RowStyle(Color.White, Color(0xFF94A3B8), Icons.Default.MedicalServices,

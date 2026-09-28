@@ -144,7 +144,7 @@ fun HomeScreen(
                         kotlinx.coroutines.delay(800)
                     }
                 }
-                val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner) {
                     val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                         if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
