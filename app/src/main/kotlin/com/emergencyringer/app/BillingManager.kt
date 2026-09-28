@@ -13,7 +13,7 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
         .build()
 
     companion object {
-        const val PREMIUM_PRODUCT_ID = "premium_unlock" 
+        const val PREMIUM_PRODUCT_ID = "premium_unlock1"
     }
 
     init {

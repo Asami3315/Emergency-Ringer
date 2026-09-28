@@ -41,6 +41,19 @@ fun PremiumScreen(
     // Handle back button press
     BackHandler(onBack = onClose)
 
+    // Auto-dismiss paywall when purchase succeeds
+    androidx.compose.runtime.DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("emergency_contacts", android.content.Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "is_premium" && EmergencyContactRepository.isPremium(context)) {
+                android.widget.Toast.makeText(context, "🎉 KinLink Premium Unlocked!", android.widget.Toast.LENGTH_SHORT).show()
+                onClose()
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {

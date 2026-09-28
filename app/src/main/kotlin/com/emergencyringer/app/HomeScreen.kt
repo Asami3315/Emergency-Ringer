@@ -87,7 +87,7 @@ fun HomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp)
+                .height(170.dp)
                 .background(Brush.verticalGradient(listOf(Color(0xFFFDFBF7).copy(alpha = 0.9f), Color.Transparent)))
         )
 
@@ -104,17 +104,18 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp, bottom = 4.dp), // Reduced top padding
+                        .padding(top = 48.dp, bottom = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             "KinLink",
-                            fontSize = 56.sp, // Increased size
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Cursive,
-                            fontWeight = FontWeight.Bold,
-                            color = NeoYellowDark
+                            fontSize = 38.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeoYellowDark,
+                            letterSpacing = (-1).sp
                         )
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             "Stay connected with your loved ones",
                             fontSize = 12.sp,
@@ -373,11 +374,10 @@ private fun HeroStatusCard(
 
                 Text(
                     titleText,
-                    fontSize = 42.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Cursive,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = if (isActive && monitoringEnabled) NeoYellowDark else titleColor,
-                    lineHeight = 34.sp
+                    letterSpacing = (-0.5).sp
                 )
                 
                 if (!isActive) {

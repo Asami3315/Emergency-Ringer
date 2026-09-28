@@ -68,7 +68,7 @@ private val SurfaceWhite    = Color(0xFFFFFFFF)
 private val GlassFrost      = Color(0x33000000)
 private val AccentPurple    = Color(0xFFFFD569)
 
-class MainActivity : FragmentActivity() {
+class MainActivity : ComponentActivity() {
 
     private lateinit var billingManager: BillingManager
 
